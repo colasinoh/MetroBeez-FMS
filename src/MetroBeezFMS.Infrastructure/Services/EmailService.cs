@@ -28,8 +28,8 @@ public sealed class EmailService : IEmailService
         var fromEmail = _configuration["SENDGRID_FROM_EMAIL"];
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(fromEmail))
         {
-            _logger.LogWarning("Email not sent to {Email}; SendGrid environment variables are not configured. Subject: {Subject}", toEmail, subject);
-            return;
+            _logger.LogError("Email not sent to {Email}; SendGrid environment variables are not configured. Subject: {Subject}", toEmail, subject);
+            throw new InvalidOperationException("SendGrid is not configured. Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL before sending email.");
         }
 
         var client = new SendGridClient(apiKey);
@@ -44,7 +44,8 @@ public sealed class EmailService : IEmailService
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Body.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("SendGrid returned {StatusCode} for {Email}: {Body}", response.StatusCode, toEmail, body);
+            _logger.LogError("SendGrid returned {StatusCode} for {Email}: {Body}", response.StatusCode, toEmail, body);
+            throw new InvalidOperationException($"SendGrid returned {response.StatusCode}. Confirm the API key is valid and SENDGRID_FROM_EMAIL is a verified sender.");
         }
     }
 

@@ -41,6 +41,7 @@ import {
   Routes,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom'
 import {
   bookingsSeed,
@@ -98,6 +99,28 @@ type Toast = {
   detail: string
 }
 
+type AuthResponse = {
+  token: string
+  userId: string
+  tenantId: string | null
+  email: string
+  fullName: string
+  role: string
+  tenantName: string | null
+  requiresEmailVerification: boolean
+  requiresOnboarding: boolean
+}
+
+type AuthSession = {
+  token: string
+  userId: string
+  tenantId: string | null
+  email: string
+  fullName: string
+  role: string
+  tenantName: string | null
+}
+
 type AppData = {
   vehicles: Vehicle[]
   drivers: Driver[]
@@ -109,12 +132,72 @@ type AppData = {
   notifications: NotificationItem[]
 }
 
+const authStorageKey = 'metrobeez.auth'
+const apiBaseUrl = ((import.meta.env.VITE_API_BASE_URL as string | undefined)
+  ?? (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:5117' : '')).replace(/\/$/, '')
+
+function loadStoredSession() {
+  try {
+    const value = window.localStorage.getItem(authStorageKey)
+    return value ? (JSON.parse(value) as AuthSession) : null
+  } catch {
+    window.localStorage.removeItem(authStorageKey)
+    return null
+  }
+}
+
+function storeSession(auth: AuthResponse) {
+  const session: AuthSession = {
+    token: auth.token,
+    userId: auth.userId,
+    tenantId: auth.tenantId,
+    email: auth.email,
+    fullName: auth.fullName,
+    role: auth.role,
+    tenantName: auth.tenantName,
+  }
+  window.localStorage.setItem(authStorageKey, JSON.stringify(session))
+  return session
+}
+
+async function postJson<TResponse>(path: string, body: unknown, token?: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(readApiError(text, response.statusText))
+  }
+
+  return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
+function readApiError(text: string, fallback: string) {
+  if (!text) return fallback
+  try {
+    const payload = JSON.parse(text) as { detail?: string; title?: string; errors?: Record<string, string[]> }
+    if (payload.detail) return payload.detail
+    if (payload.errors) return Object.values(payload.errors).flat().join(' ')
+    if (payload.title) return payload.title
+  } catch {
+    return text
+  }
+
+  return fallback
+}
+
 function App() {
-  const [authenticated, setAuthenticated] = useState(true)
+  const [session, setSession] = useState<AuthSession | null>(() => loadStoredSession())
   const [company, setCompany] = useState<CompanyProfile>({
-    name: 'MetroBeez Demo Fleet',
-    address: 'Metro Manila, Philippines',
-    contactNumber: '+63 2 8555 0100',
+    name: session?.tenantName ?? 'MetroBeez FMS',
+    address: '',
+    contactNumber: '',
   })
   const [vehicles, setVehicles] = useState(vehiclesSeed)
   const [drivers, setDrivers] = useState(driversSeed)
@@ -131,24 +214,35 @@ function App() {
     setToast(nextToast)
     window.setTimeout(() => setToast(null), 3200)
   }
+  const handleAuthenticated = (auth: AuthResponse) => {
+    const nextSession = storeSession(auth)
+    setSession(nextSession)
+    if (auth.tenantName) {
+      setCompany((current) => ({ ...current, name: auth.tenantName! }))
+    }
+  }
+  const handleLogout = () => {
+    window.localStorage.removeItem(authStorageKey)
+    setSession(null)
+  }
 
   return (
     <>
       <Routes>
-        <Route path="/login" element={<LoginPage onLogin={() => setAuthenticated(true)} showToast={showToast} />} />
+        <Route path="/login" element={<LoginPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
         <Route path="/register" element={<RegisterPage showToast={showToast} />} />
-        <Route path="/verify-email" element={<VerifyEmailPage showToast={showToast} />} />
+        <Route path="/verify-email" element={<VerifyEmailPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
         <Route
           path="/onboarding"
-          element={<OnboardingPage company={company} setCompany={setCompany} showToast={showToast} />}
+          element={<OnboardingPage company={company} session={session} setCompany={setCompany} showToast={showToast} />}
         />
         <Route
           element={
             <Shell
-              authenticated={authenticated}
+              authenticated={Boolean(session)}
               company={company}
               notifications={notifications}
-              onLogout={() => setAuthenticated(false)}
+              onLogout={handleLogout}
             />
           }
         >
@@ -1164,20 +1258,46 @@ function SettingsPage({
   )
 }
 
-function LoginPage({ onLogin, showToast }: { onLogin: () => void; showToast: (toast: Toast) => void }) {
+function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: AuthResponse) => void; showToast: (toast: Toast) => void }) {
   const navigate = useNavigate()
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    onLogin()
-    showToast({ title: 'Welcome back', detail: 'You are signed in to MetroBeez FMS.' })
-    navigate('/dashboard')
+    setSubmitting(true)
+    const form = new FormData(event.currentTarget)
+    try {
+      const auth = await postJson<AuthResponse>('/api/auth/login', {
+        email: String(form.get('email')),
+        password: String(form.get('password')),
+      })
+
+      if (auth.requiresEmailVerification) {
+        showToast({ title: 'Verify your email', detail: 'Open the MetroBeez FMS verification email before logging in.' })
+        navigate(`/verify-email?email=${encodeURIComponent(auth.email)}`)
+        return
+      }
+
+      if (!auth.token) {
+        showToast({ title: 'Onboarding pending', detail: 'Verify your email first so your tenant workspace can be created.' })
+        navigate(`/verify-email?email=${encodeURIComponent(auth.email)}`)
+        return
+      }
+
+      onAuthenticated(auth)
+      showToast({ title: 'Welcome back', detail: 'You are signed in to MetroBeez FMS.' })
+      navigate(auth.requiresOnboarding ? '/onboarding' : '/dashboard')
+    } catch (error) {
+      showToast({ title: 'Login failed', detail: error instanceof Error ? error.message : 'Please check your credentials.' })
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
-    <AuthShell title="Sign in" subtitle="MetroBeez FMS">
+    <AuthShell title="Login" subtitle="MetroBeez FMS">
       <form className="auth-form" onSubmit={submit}>
-        <Field label="Email" name="email" type="email" defaultValue="owner@metrobeez.example" required />
-        <Field label="Password" name="password" type="password" defaultValue="metrobeez-demo" required />
-        <button className="primary-button full" type="submit"><ShieldCheck size={18} /> Login</button>
+        <Field label="Email" name="email" type="email" required />
+        <Field label="Password" name="password" type="password" required />
+        <button className="primary-button full" type="submit" disabled={submitting}><ShieldCheck size={18} /> {submitting ? 'Logging in...' : 'Login'}</button>
         <Link to="/register">Create an account</Link>
       </form>
     </AuthShell>
@@ -1186,10 +1306,25 @@ function LoginPage({ onLogin, showToast }: { onLogin: () => void; showToast: (to
 
 function RegisterPage({ showToast }: { showToast: (toast: Toast) => void }) {
   const navigate = useNavigate()
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    showToast({ title: 'Verification email queued', detail: 'Tenant creation waits until the email is verified.' })
-    navigate('/verify-email')
+    setSubmitting(true)
+    const form = new FormData(event.currentTarget)
+    const email = String(form.get('email'))
+    try {
+      await postJson('/api/auth/register', {
+        fullName: String(form.get('fullName')),
+        email,
+        password: String(form.get('password')),
+      })
+      showToast({ title: 'Verification email sent', detail: 'Check your inbox and spam folder before tenant onboarding.' })
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`)
+    } catch (error) {
+      showToast({ title: 'Account not created', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
     <AuthShell title="Create account" subtitle="MetroBeez FMS">
@@ -1197,27 +1332,45 @@ function RegisterPage({ showToast }: { showToast: (toast: Toast) => void }) {
         <Field label="Full name" name="fullName" required />
         <Field label="Email" name="email" type="email" required />
         <Field label="Password" name="password" type="password" required />
-        <button className="primary-button full" type="submit"><MailCheck size={18} /> Register</button>
+        <button className="primary-button full" type="submit" disabled={submitting}><MailCheck size={18} /> {submitting ? 'Creating account...' : 'Create account'}</button>
         <Link to="/login">Back to login</Link>
       </form>
     </AuthShell>
   )
 }
 
-function VerifyEmailPage({ showToast }: { showToast: (toast: Toast) => void }) {
+function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: AuthResponse) => void; showToast: (toast: Toast) => void }) {
   const navigate = useNavigate()
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [searchParams] = useSearchParams()
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    showToast({ title: 'Email verified', detail: 'Tenant database provisioning can now begin.' })
-    navigate('/onboarding')
+    setSubmitting(true)
+    const form = new FormData(event.currentTarget)
+    try {
+      const auth = await postJson<AuthResponse>('/api/auth/verify-email', {
+        email: String(form.get('email')),
+        token: String(form.get('token')),
+        companyName: String(form.get('companyName')),
+      })
+      onAuthenticated(auth)
+      showToast({ title: 'Email verified', detail: 'Your tenant workspace has been created.' })
+      navigate(auth.requiresOnboarding ? '/onboarding' : '/dashboard')
+    } catch (error) {
+      showToast({ title: 'Verification failed', detail: error instanceof Error ? error.message : 'Please check the email link.' })
+    } finally {
+      setSubmitting(false)
+    }
   }
+  const email = searchParams.get('email') ?? ''
+  const token = searchParams.get('token') ?? ''
   return (
     <AuthShell title="Verify email" subtitle="MetroBeez FMS">
       <form className="auth-form" onSubmit={submit}>
-        <Field label="Email" name="email" type="email" required />
-        <Field label="Verification token" name="token" required />
-        <Field label="Company name" name="companyName" defaultValue="MetroBeez Demo Fleet" required />
-        <button className="primary-button full" type="submit"><CheckCircle2 size={18} /> Verify</button>
+        <Field label="Email" name="email" type="email" defaultValue={email} required />
+        <Field label="Verification token" name="token" defaultValue={token} required />
+        <Field label="Company name" name="companyName" required />
+        <button className="primary-button full" type="submit" disabled={submitting}><CheckCircle2 size={18} /> {submitting ? 'Verifying...' : 'Verify email'}</button>
       </form>
     </AuthShell>
   )
@@ -1225,25 +1378,50 @@ function VerifyEmailPage({ showToast }: { showToast: (toast: Toast) => void }) {
 
 function OnboardingPage({
   company,
+  session,
   setCompany,
   showToast,
 }: {
   company: CompanyProfile
+  session: AuthSession | null
   setCompany: React.Dispatch<React.SetStateAction<CompanyProfile>>
   showToast: (toast: Toast) => void
 }) {
   const navigate = useNavigate()
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!session?.token) {
+      navigate('/login')
+      return
+    }
+
+    setSubmitting(true)
     const form = new FormData(event.currentTarget)
-    setCompany({
+    const nextCompany = {
       name: String(form.get('name')),
       address: String(form.get('address')),
       contactNumber: String(form.get('contactNumber')),
-    })
-    showToast({ title: 'Company profile ready', detail: 'Your fleet workspace is set up.' })
-    navigate('/dashboard')
+    }
+    try {
+      await postJson('/api/auth/onboarding', {
+        companyName: nextCompany.name,
+        businessAddress: nextCompany.address,
+        contactNumber: nextCompany.contactNumber,
+        birDtiLguDocumentUrl: null,
+        logoUrl: null,
+      }, session.token)
+      setCompany(nextCompany)
+      showToast({ title: 'Company profile ready', detail: 'Your fleet workspace is set up.' })
+      navigate('/dashboard')
+    } catch (error) {
+      showToast({ title: 'Onboarding failed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
   }
+  if (!session?.token) return <Navigate to="/login" replace />
+
   return (
     <AuthShell title="Company profile" subtitle="Onboarding">
       <form className="auth-form" onSubmit={submit}>
@@ -1254,7 +1432,7 @@ function OnboardingPage({
           <span>Logo upload</span>
           <input name="logo" type="file" />
         </label>
-        <button className="primary-button full" type="submit"><Save size={18} /> Finish onboarding</button>
+        <button className="primary-button full" type="submit" disabled={submitting}><Save size={18} /> {submitting ? 'Saving...' : 'Finish onboarding'}</button>
       </form>
     </AuthShell>
   )

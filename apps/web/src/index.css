@@ -43,6 +43,11 @@ select {
   font: inherit;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 a {
   color: inherit;
 }
@@ -828,13 +833,18 @@ tr:last-child td {
 
 .auth-panel h1 {
   margin-bottom: 18px;
+  font-weight: 500;
 }
 
 .auth-form a {
   justify-self: center;
   color: var(--blue);
-  font-weight: 800;
+  font-weight: 500;
   text-decoration: none;
+}
+
+.auth-form .primary-button {
+  font-weight: 500;
 }
 
 .toast {
