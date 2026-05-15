@@ -1,0 +1,59 @@
+using MetroBeezFMS.Application;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using SendGrid;
+using SendGrid.Helpers.Mail;
+
+namespace MetroBeezFMS.Infrastructure.Services;
+
+public sealed class EmailService : IEmailService
+{
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<EmailService> _logger;
+
+    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    {
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
+    {
+        if (!subject.Contains("MetroBeez FMS", StringComparison.OrdinalIgnoreCase))
+        {
+            subject = $"MetroBeez FMS - {subject}";
+        }
+
+        var apiKey = _configuration["SENDGRID_API_KEY"];
+        var fromEmail = _configuration["SENDGRID_FROM_EMAIL"];
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(fromEmail))
+        {
+            _logger.LogWarning("Email not sent to {Email}; SendGrid environment variables are not configured. Subject: {Subject}", toEmail, subject);
+            return;
+        }
+
+        var client = new SendGridClient(apiKey);
+        var message = MailHelper.CreateSingleEmail(
+            new EmailAddress(fromEmail, "MetroBeez FMS"),
+            new EmailAddress(toEmail),
+            subject,
+            plainTextContent: StripHtml(htmlBody),
+            htmlContent: htmlBody);
+
+        var response = await client.SendEmailAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Body.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("SendGrid returned {StatusCode} for {Email}: {Body}", response.StatusCode, toEmail, body);
+        }
+    }
+
+    private static string StripHtml(string html)
+    {
+        return html.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br/>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br />", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<p>", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("</p>", "\n", StringComparison.OrdinalIgnoreCase);
+    }
+}

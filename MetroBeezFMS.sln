@@ -1,0 +1,48 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9493ECBB-5C4E-4F78-8D1B-230CFAAA7724}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroBeezFMS.Domain", "src\MetroBeezFMS.Domain\MetroBeezFMS.Domain.csproj", "{85FE21EB-73A5-483B-B653-CE2B00E14F90}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroBeezFMS.Application", "src\MetroBeezFMS.Application\MetroBeezFMS.Application.csproj", "{C8F03E53-BC8A-4B76-893A-ADA6977898B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroBeezFMS.Infrastructure", "src\MetroBeezFMS.Infrastructure\MetroBeezFMS.Infrastructure.csproj", "{9CA437F2-0019-40CB-AA46-90BE88705E7D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroBeezFMS.Api", "src\MetroBeezFMS.Api\MetroBeezFMS.Api.csproj", "{EA147C0F-925F-4438-A481-7C687164E7C2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{85FE21EB-73A5-483B-B653-CE2B00E14F90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{85FE21EB-73A5-483B-B653-CE2B00E14F90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{85FE21EB-73A5-483B-B653-CE2B00E14F90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{85FE21EB-73A5-483B-B653-CE2B00E14F90}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C8F03E53-BC8A-4B76-893A-ADA6977898B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8F03E53-BC8A-4B76-893A-ADA6977898B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8F03E53-BC8A-4B76-893A-ADA6977898B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8F03E53-BC8A-4B76-893A-ADA6977898B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9CA437F2-0019-40CB-AA46-90BE88705E7D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CA437F2-0019-40CB-AA46-90BE88705E7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CA437F2-0019-40CB-AA46-90BE88705E7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CA437F2-0019-40CB-AA46-90BE88705E7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA147C0F-925F-4438-A481-7C687164E7C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA147C0F-925F-4438-A481-7C687164E7C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA147C0F-925F-4438-A481-7C687164E7C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA147C0F-925F-4438-A481-7C687164E7C2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{85FE21EB-73A5-483B-B653-CE2B00E14F90} = {9493ECBB-5C4E-4F78-8D1B-230CFAAA7724}
+		{C8F03E53-BC8A-4B76-893A-ADA6977898B2} = {9493ECBB-5C4E-4F78-8D1B-230CFAAA7724}
+		{9CA437F2-0019-40CB-AA46-90BE88705E7D} = {9493ECBB-5C4E-4F78-8D1B-230CFAAA7724}
+		{EA147C0F-925F-4438-A481-7C687164E7C2} = {9493ECBB-5C4E-4F78-8D1B-230CFAAA7724}
+	EndGlobalSection
+EndGlobal

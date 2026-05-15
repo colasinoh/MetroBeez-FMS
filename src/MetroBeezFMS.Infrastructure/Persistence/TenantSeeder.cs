@@ -1,0 +1,260 @@
+using MetroBeezFMS.Domain;
+using Microsoft.EntityFrameworkCore;
+
+namespace MetroBeezFMS.Infrastructure.Persistence;
+
+public static class TenantSeeder
+{
+    public static async Task SeedAsync(TenantDbContext dbContext, Guid tenantId, Guid ownerUserId, string companyName, CancellationToken cancellationToken = default)
+    {
+        if (await dbContext.CompanyProfiles.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var vehicleA = new Vehicle
+        {
+            PlateNumber = "MBZ-1024",
+            Make = "Toyota",
+            Model = "Innova",
+            SeriesVariant = "2.8 E Diesel",
+            YearModel = 2022,
+            Color = "White",
+            VehicleType = "MPV",
+            BodyType = "Wagon",
+            FuelType = "Diesel",
+            PassengerCapacity = 7,
+            Classification = "Private",
+            CurrentOdometer = 35240,
+            OwnershipStatus = OwnershipStatus.Owned,
+            Status = VehicleStatus.Available,
+            Remarks = "Primary airport rental unit"
+        };
+        var vehicleB = new Vehicle
+        {
+            PlateNumber = "MBZ-2048",
+            Make = "Mitsubishi",
+            Model = "L300",
+            SeriesVariant = "Exceed",
+            YearModel = 2021,
+            Color = "Silver",
+            VehicleType = "Van",
+            BodyType = "Delivery Van",
+            FuelType = "Diesel",
+            PassengerCapacity = 3,
+            Classification = "Logistics",
+            CurrentOdometer = 61200,
+            OwnershipStatus = OwnershipStatus.Financed,
+            Status = VehicleStatus.Booked,
+            Remarks = "Corporate delivery route"
+        };
+
+        var driverA = new Driver
+        {
+            FullName = "Miguel Santos",
+            ContactNumber = "+63 917 555 0142",
+            Email = "miguel.driver@example.com",
+            EmergencyContact = "Ana Santos - +63 917 555 0111",
+            LicenseNumber = "N01-23-456789",
+            LicenseTypeRestrictions = "Professional, Restriction B/B1",
+            LicenseExpirationDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(8)),
+            Status = DriverStatus.Active,
+            Notes = "Preferred for airport and executive bookings"
+        };
+        var driverB = new Driver
+        {
+            FullName = "Carlo Reyes",
+            ContactNumber = "+63 918 555 0199",
+            Email = "carlo.driver@example.com",
+            EmergencyContact = "Lina Reyes - +63 918 555 0100",
+            LicenseNumber = "N02-88-224466",
+            LicenseTypeRestrictions = "Professional, Restriction B/B2",
+            LicenseExpirationDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(24)),
+            Status = DriverStatus.Active,
+            Notes = "Delivery/logistics specialist"
+        };
+
+        var renterA = new Renter
+        {
+            FullName = "Alyssa Cruz",
+            ContactNumber = "+63 919 555 0101",
+            Email = "alyssa@example.com",
+            ValidIdType = "Passport",
+            ValidIdNumber = "P1234567A",
+            EmergencyContact = "Ramon Cruz - +63 919 555 0102"
+        };
+        var renterB = new Renter
+        {
+            FullName = "Northstar Trading Corp.",
+            ContactNumber = "+63 2 8555 0188",
+            Email = "operations@northstar.example",
+            ValidIdType = "SEC Registration",
+            ValidIdNumber = "CS202312345",
+            Notes = "Corporate logistics account"
+        };
+        var renterC = new Renter
+        {
+            FullName = "Jose Villanueva",
+            ContactNumber = "+63 920 555 0133",
+            Email = "jose@example.com",
+            ValidIdType = "Driver License",
+            ValidIdNumber = "D11-44-998877",
+            DriverLicenseNumber = "D11-44-998877"
+        };
+
+        var bookingA = new Booking
+        {
+            ReferenceNumber = "BK-2026-0001",
+            Vehicle = vehicleA,
+            Renter = renterA,
+            Driver = driverA,
+            BookingType = BookingType.WithDriver,
+            StartDateTime = now.AddDays(1),
+            EndDateTime = now.AddDays(3),
+            PickupLocation = "NAIA Terminal 3",
+            ReturnLocation = "BGC Taguig",
+            RateType = RateType.Daily,
+            RateAmount = 4200,
+            SecurityDeposit = 5000,
+            PaymentStatus = PaymentStatus.Partial,
+            BookingStatus = BookingStatus.Confirmed
+        };
+        var bookingB = new Booking
+        {
+            ReferenceNumber = "BK-2026-0002",
+            Vehicle = vehicleB,
+            Renter = renterB,
+            Driver = driverB,
+            BookingType = BookingType.DeliveryLogistics,
+            StartDateTime = now.AddDays(-1),
+            EndDateTime = now.AddDays(2),
+            PickupLocation = "Makati Warehouse",
+            ReturnLocation = "Quezon City Hub",
+            RateType = RateType.Custom,
+            RateAmount = 18500,
+            SecurityDeposit = 0,
+            PaymentStatus = PaymentStatus.Paid,
+            BookingStatus = BookingStatus.Active
+        };
+        var bookingC = new Booking
+        {
+            ReferenceNumber = "BK-2026-0003",
+            Vehicle = vehicleA,
+            Renter = renterC,
+            BookingType = BookingType.SelfDrive,
+            StartDateTime = now.AddDays(9),
+            EndDateTime = now.AddDays(11),
+            PickupLocation = "MetroBeez Garage",
+            ReturnLocation = "MetroBeez Garage",
+            RateType = RateType.Daily,
+            RateAmount = 3600,
+            SecurityDeposit = 8000,
+            PaymentStatus = PaymentStatus.Unpaid,
+            BookingStatus = BookingStatus.Pending
+        };
+
+        var tripA = new Trip
+        {
+            TripNumber = "TR-2026-0001",
+            Booking = bookingB,
+            BookingReference = bookingB.ReferenceNumber,
+            Vehicle = vehicleB,
+            Driver = driverB,
+            Renter = renterB,
+            TripType = TripType.Delivery,
+            StartDateTime = now.AddDays(-1),
+            StartingOdometer = 60980,
+            EndingOdometer = 61200,
+            FuelExpense = 3200,
+            TollExpense = 820,
+            ParkingExpense = 180,
+            OtherExpenses = 0,
+            GrossRevenue = 18500,
+            DriverProceedCommission = 2500,
+            PaymentMethod = "Bank transfer",
+            PaymentStatus = PaymentStatus.Paid,
+            Status = TripStatus.Active
+        };
+        tripA.Recalculate();
+
+        var tripB = new Trip
+        {
+            TripNumber = "TR-2026-0002",
+            Vehicle = vehicleA,
+            Driver = driverA,
+            Renter = renterA,
+            TripType = TripType.PrivateBooking,
+            StartDateTime = now.AddDays(-12),
+            EndDateTime = now.AddDays(-11),
+            StartingOdometer = 34820,
+            EndingOdometer = 35020,
+            FuelExpense = 2100,
+            TollExpense = 640,
+            ParkingExpense = 120,
+            OtherExpenses = 0,
+            GrossRevenue = 9500,
+            DriverProceedCommission = 1500,
+            PaymentMethod = "GCash",
+            PaymentStatus = PaymentStatus.Paid,
+            Status = TripStatus.Completed
+        };
+        tripB.Recalculate();
+
+        var tripC = new Trip
+        {
+            TripNumber = "TR-2026-0003",
+            Booking = bookingA,
+            BookingReference = bookingA.ReferenceNumber,
+            Vehicle = vehicleA,
+            Driver = driverA,
+            Renter = renterA,
+            TripType = TripType.Rental,
+            StartDateTime = bookingA.StartDateTime,
+            GrossRevenue = 12600,
+            PaymentStatus = PaymentStatus.Partial,
+            Status = TripStatus.Scheduled
+        };
+        tripC.Recalculate();
+
+        var pmsA = new MaintenanceSchedule
+        {
+            Vehicle = vehicleA,
+            Title = "10,000 km PMS",
+            DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(18)),
+            DueOdometer = 36000,
+            Status = MaintenanceStatus.DueSoon,
+            VendorShop = "MetroBeez Partner Garage",
+            EstimatedCost = 8500,
+            Notes = "Oil, filters, brake inspection"
+        };
+        var pmsB = new MaintenanceSchedule
+        {
+            Vehicle = vehicleB,
+            Title = "Brake and suspension inspection",
+            DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)),
+            DueOdometer = 62000,
+            Status = MaintenanceStatus.DueSoon,
+            VendorShop = "North EDSA Auto Care",
+            EstimatedCost = 12000
+        };
+
+        dbContext.CompanyProfiles.Add(new CompanyProfile
+        {
+            CompanyName = companyName,
+            BusinessAddress = "Metro Manila, Philippines",
+            ContactNumber = "+63 2 8555 0100"
+        });
+        dbContext.AddRange(vehicleA, vehicleB, driverA, driverB, renterA, renterB, renterC, bookingA, bookingB, bookingC, tripA, tripB, tripC, pmsA, pmsB);
+        dbContext.Notifications.Add(new Notification
+        {
+            TenantId = tenantId,
+            UserId = ownerUserId,
+            Title = "Welcome to MetroBeez FMS",
+            Message = "Your demo fleet workspace is ready.",
+            Type = NotificationType.Info
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+}
