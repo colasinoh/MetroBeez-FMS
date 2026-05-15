@@ -1,17 +1,22 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   Bell,
   Building2,
   CalendarDays,
+  Camera,
   Car,
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Edit3,
   FileText,
   Filter,
   Fuel,
+  History,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   MailCheck,
@@ -92,6 +97,21 @@ type CompanyProfile = {
   name: string
   address: string
   contactNumber: string
+  birDtiLguDocumentUrl?: string
+  logoUrl?: string
+}
+
+type UserProfile = {
+  fullName: string
+  email: string
+  profilePhotoUrl: string
+  address: string
+  mobileNumber: string
+  jobTitle: string
+  emergencyContact: string
+  timezone: string
+  dateFormat: string
+  notificationEmail: string
 }
 
 type Toast = {
@@ -130,6 +150,17 @@ type AppData = {
   maintenance: MaintenanceSchedule[]
   documents: DocumentAttachment[]
   notifications: NotificationItem[]
+  audits: AuditEntry[]
+}
+
+type AuditEntry = {
+  id: string
+  entityType: 'Trip'
+  entityId: string
+  action: string
+  summary: string
+  actor: string
+  createdAt: string
 }
 
 const authStorageKey = 'metrobeez.auth'
@@ -192,12 +223,47 @@ function readApiError(text: string, fallback: string) {
   return fallback
 }
 
+const initialAuditEntries: AuditEntry[] = [
+  {
+    id: 'audit-trip-1',
+    entityType: 'Trip',
+    entityId: 'trip-1',
+    action: 'Trip started',
+    summary: 'Starting odometer and assigned vehicle status were updated.',
+    actor: 'System seed',
+    createdAt: '2026-05-14T07:00',
+  },
+  {
+    id: 'audit-trip-2',
+    entityType: 'Trip',
+    entityId: 'trip-2',
+    action: 'Trip completed',
+    summary: 'Ending odometer, expenses, payment status, and profit were recorded.',
+    actor: 'System seed',
+    createdAt: '2026-05-03T20:00',
+  },
+]
+
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadStoredSession())
   const [company, setCompany] = useState<CompanyProfile>({
-    name: session?.tenantName ?? 'MetroBeez FMS',
+    name: session?.tenantName ?? 'BeezFleet',
     address: '',
     contactNumber: '',
+    birDtiLguDocumentUrl: '',
+    logoUrl: '',
+  })
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    fullName: session?.fullName ?? '',
+    email: session?.email ?? '',
+    profilePhotoUrl: '',
+    address: '',
+    mobileNumber: '',
+    jobTitle: 'Owner / Admin',
+    emergencyContact: '',
+    timezone: 'Asia/Manila',
+    dateFormat: 'MMM d, yyyy',
+    notificationEmail: session?.email ?? '',
   })
   const [vehicles, setVehicles] = useState(vehiclesSeed)
   const [drivers, setDrivers] = useState(driversSeed)
@@ -207,9 +273,10 @@ function App() {
   const [maintenance, setMaintenance] = useState(maintenanceSeed)
   const [documents, setDocuments] = useState(documentsSeed)
   const [notifications, setNotifications] = useState(notificationsSeed)
+  const [auditEntries, setAuditEntries] = useState(initialAuditEntries)
   const [toast, setToast] = useState<Toast | null>(null)
 
-  const data = { vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications }
+  const data = { vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications, audits: auditEntries }
   const showToast = (nextToast: Toast) => {
     setToast(nextToast)
     window.setTimeout(() => setToast(null), 3200)
@@ -217,9 +284,29 @@ function App() {
   const handleAuthenticated = (auth: AuthResponse) => {
     const nextSession = storeSession(auth)
     setSession(nextSession)
+    setUserProfile((current) => ({
+      ...current,
+      fullName: auth.fullName,
+      email: auth.email,
+      notificationEmail: current.notificationEmail || auth.email,
+    }))
     if (auth.tenantName) {
       setCompany((current) => ({ ...current, name: auth.tenantName! }))
     }
+  }
+  const appendTripAudit = (entityId: string, action: string, summary: string) => {
+    setAuditEntries((current) => [
+      {
+        id: crypto.randomUUID(),
+        entityType: 'Trip',
+        entityId,
+        action,
+        summary,
+        actor: userProfile.fullName || session?.fullName || 'Owner/Admin',
+        createdAt: new Date().toISOString(),
+      },
+      ...current,
+    ])
   }
   const handleLogout = () => {
     window.localStorage.removeItem(authStorageKey)
@@ -230,6 +317,8 @@ function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage showToast={showToast} />} />
+        <Route path="/reset-password" element={<ResetPasswordPage showToast={showToast} />} />
         <Route path="/register" element={<RegisterPage showToast={showToast} />} />
         <Route path="/verify-email" element={<VerifyEmailPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
         <Route
@@ -241,6 +330,7 @@ function App() {
             <Shell
               authenticated={Boolean(session)}
               company={company}
+              session={session}
               notifications={notifications}
               onLogout={handleLogout}
             />
@@ -252,11 +342,11 @@ function App() {
             path="/vehicles"
             element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} documents={documents} trips={trips} />}
           />
-          <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} />} />
+          <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} setVehicles={setVehicles} showToast={showToast} />} />
           <Route path="/drivers" element={<DriversPage drivers={drivers} setDrivers={setDrivers} trips={trips} />} />
-          <Route path="/drivers/:id" element={<DriverDetailsPage data={data} />} />
+          <Route path="/drivers/:id" element={<DriverDetailsPage data={data} setDrivers={setDrivers} showToast={showToast} />} />
           <Route path="/renters" element={<RentersPage renters={renters} setRenters={setRenters} data={data} />} />
-          <Route path="/renters/:id" element={<RenterDetailsPage data={data} />} />
+          <Route path="/renters/:id" element={<RenterDetailsPage data={data} setRenters={setRenters} showToast={showToast} />} />
           <Route
             path="/bookings"
             element={
@@ -268,19 +358,19 @@ function App() {
               />
             }
           />
-          <Route path="/bookings/:id" element={<BookingDetailsPage data={data} />} />
+          <Route path="/bookings/:id" element={<BookingDetailsPage data={data} setBookings={setBookings} showToast={showToast} />} />
           <Route
             path="/trips"
-            element={<TripsPage data={data} setTrips={setTrips} setVehicles={setVehicles} showToast={showToast} />}
+            element={<TripsPage data={data} setTrips={setTrips} setVehicles={setVehicles} showToast={showToast} appendTripAudit={appendTripAudit} />}
           />
-          <Route path="/trips/:id" element={<TripDetailsPage data={data} />} />
+          <Route path="/trips/:id" element={<TripDetailsPage data={data} setTrips={setTrips} showToast={showToast} appendTripAudit={appendTripAudit} />} />
           <Route
             path="/maintenance"
-            element={<MaintenancePage data={data} maintenance={maintenance} setMaintenance={setMaintenance} />}
+            element={<MaintenancePage data={data} maintenance={maintenance} setMaintenance={setMaintenance} showToast={showToast} />}
           />
           <Route
             path="/documents"
-            element={<DocumentsPage documents={documents} setDocuments={setDocuments} data={data} />}
+            element={<DocumentsPage documents={documents} setDocuments={setDocuments} data={data} showToast={showToast} />}
           />
           <Route
             path="/notifications"
@@ -289,7 +379,7 @@ function App() {
           <Route path="/reports" element={<ReportsPage data={data} />} />
           <Route
             path="/settings"
-            element={<SettingsPage company={company} setCompany={setCompany} showToast={showToast} />}
+            element={<SettingsPage company={company} setCompany={setCompany} session={session} setSession={setSession} userProfile={userProfile} setUserProfile={setUserProfile} showToast={showToast} />}
           />
         </Route>
       </Routes>
@@ -301,16 +391,19 @@ function App() {
 function Shell({
   authenticated,
   company,
+  session,
   notifications,
   onLogout,
 }: {
   authenticated: boolean
   company: CompanyProfile
+  session: AuthSession | null
   notifications: NotificationItem[]
   onLogout: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
+  const unreadCount = notifications.filter((item) => !item.isRead).length
 
   if (!authenticated) {
     return <Navigate to="/login" replace />
@@ -320,9 +413,9 @@ function Shell({
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'is-open' : ''}`}>
         <Link className="brand" to="/dashboard" onClick={() => setMenuOpen(false)}>
-          <span className="brand-mark">MB</span>
+          <span className="brand-mark">BF</span>
           <span>
-            <strong>MetroBeez FMS</strong>
+            <strong>BeezFleet</strong>
             <small>Fleet command center</small>
           </span>
         </Link>
@@ -348,12 +441,12 @@ function Shell({
             <Search size={17} />
             <input placeholder="Search fleet records" />
           </label>
-          <button className="icon-button notification-button" type="button" title="Notifications">
+          <button className="icon-button notification-button" type="button" title="Notifications" onClick={() => navigate('/notifications')}>
             <Bell size={19} />
-            {notifications.some((item) => !item.isRead) && <span className="notification-dot" />}
+            {unreadCount > 0 && <span className="notification-count">{unreadCount}</span>}
           </button>
           <button className="avatar-button" type="button" title="Account menu" onClick={() => navigate('/settings')}>
-            HA
+            {initials(session?.fullName)}
           </button>
           <button className="icon-button" type="button" title="Logout" onClick={onLogout}>
             <LogOut size={18} />
@@ -380,7 +473,6 @@ function DashboardPage({ data }: { data: AppData }) {
       <PageHeader
         eyebrow="Operations"
         title="Dashboard"
-        action={<button className="primary-button" type="button"><Plus size={18} /> New booking</button>}
       />
       <section className="metric-grid">
         <MetricCard icon={Car} label="Total vehicles" value={data.vehicles.length.toString()} tone="blue" />
@@ -465,6 +557,7 @@ function VehiclesPage({
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'All' | VehicleStatus>('All')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
@@ -479,32 +572,16 @@ function VehiclesPage({
   const addVehicle = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setVehicles((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        plateNumber: String(form.get('plateNumber')),
-        mvFileNumber: '',
-        engineNumber: '',
-        chassisVinNumber: '',
-        make: String(form.get('make')),
-        model: String(form.get('model')),
-        seriesVariant: String(form.get('seriesVariant') || ''),
-        yearModel: Number(form.get('yearModel') || new Date().getFullYear()),
-        color: String(form.get('color') || ''),
-        vehicleType: String(form.get('vehicleType') || 'Sedan'),
-        bodyType: String(form.get('bodyType') || ''),
-        fuelType: String(form.get('fuelType') || 'Gasoline'),
-        passengerCapacity: Number(form.get('passengerCapacity') || 4),
-        classification: 'Private',
-        grossWeight: '',
-        currentOdometer: Number(form.get('currentOdometer') || 0),
-        ownershipStatus: 'Owned',
-        status: String(form.get('status')) as VehicleStatus,
-        remarks: String(form.get('remarks') || ''),
-      },
-    ])
+    setVehicles((current) => [...current, vehicleFromForm(form)])
     setModalOpen(false)
+  }
+  const editingVehicle = vehicles.find((vehicle) => vehicle.id === editId)
+  const editVehicle = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingVehicle) return
+    const form = new FormData(event.currentTarget)
+    setVehicles((current) => current.map((vehicle) => vehicle.id === editingVehicle.id ? vehicleFromForm(form, editingVehicle) : vehicle))
+    setEditId(null)
   }
 
   return (
@@ -539,6 +616,7 @@ function VehiclesPage({
               <td>{vehicle.ownershipStatus}</td>
               <td><Badge status={vehicle.status} /></td>
               <td className="table-actions">
+                <button className="icon-button" type="button" title="Edit vehicle" onClick={() => setEditId(vehicle.id)}><Edit3 size={16} /></button>
                 <IconLink to={`/vehicles/${vehicle.id}`} title="View vehicle" />
                 <button className="icon-button danger" type="button" title="Delete vehicle" onClick={() => setDeleteId(vehicle.id)}><Trash2 size={16} /></button>
               </td>
@@ -549,6 +627,9 @@ function VehiclesPage({
       {filtered.length === 0 && <EmptyState title="No vehicles found" detail="Adjust the search or add a new fleet unit." />}
       <Modal title="Add vehicle" open={modalOpen} onClose={() => setModalOpen(false)}>
         <VehicleForm onSubmit={addVehicle} />
+      </Modal>
+      <Modal title="Edit vehicle" open={Boolean(editingVehicle)} onClose={() => setEditId(null)}>
+        <VehicleForm defaultValues={editingVehicle} onSubmit={editVehicle} submitLabel="Save vehicle changes" />
       </Modal>
       <ConfirmDialog
         open={Boolean(deleteId)}
@@ -564,8 +645,17 @@ function VehiclesPage({
   )
 }
 
-function VehicleDetailsPage({ data }: { data: AppData }) {
+function VehicleDetailsPage({
+  data,
+  setVehicles,
+  showToast,
+}: {
+  data: AppData
+  setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
+  showToast: (toast: Toast) => void
+}) {
   const { id } = useParams()
+  const [editOpen, setEditOpen] = useState(false)
   const vehicle = data.vehicles.find((item) => item.id === id)
   if (!vehicle) return <NotFound title="Vehicle not found" />
 
@@ -574,7 +664,11 @@ function VehicleDetailsPage({ data }: { data: AppData }) {
 
   return (
     <Page>
-      <PageHeader eyebrow="Vehicle details" title={vehicle.plateNumber} action={<Badge status={vehicle.status} />} />
+      <PageHeader
+        eyebrow="Vehicle details"
+        title={vehicle.plateNumber}
+        action={<HeaderActions><BackLink to="/vehicles" label="Back to vehicles" /><button className="secondary-button" type="button" onClick={() => setEditOpen(true)}><Edit3 size={16} /> Edit</button><Badge status={vehicle.status} /></HeaderActions>}
+      />
       <DetailGrid
         items={[
           ['Make / model', `${vehicle.yearModel} ${vehicle.make} ${vehicle.model}`],
@@ -605,6 +699,19 @@ function VehicleDetailsPage({ data }: { data: AppData }) {
           </CompactList>
         </Panel>
       </TwoColumn>
+      <Modal title="Edit vehicle" open={editOpen} onClose={() => setEditOpen(false)}>
+        <VehicleForm
+          defaultValues={vehicle}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            setVehicles((current) => current.map((item) => item.id === vehicle.id ? vehicleFromForm(form, vehicle) : item))
+            setEditOpen(false)
+            showToast({ title: 'Vehicle updated', detail: `${vehicle.plateNumber} changes were saved.` })
+          }}
+          submitLabel="Save vehicle changes"
+        />
+      </Modal>
     </Page>
   )
 }
@@ -620,28 +727,22 @@ function DriversPage({
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const filtered = drivers.filter((driver) => [driver.fullName, driver.email, driver.licenseNumber].join(' ').toLowerCase().includes(query.toLowerCase()))
 
   const addDriver = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setDrivers((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        fullName: String(form.get('fullName')),
-        address: String(form.get('address') || ''),
-        contactNumber: String(form.get('contactNumber') || ''),
-        email: String(form.get('email') || ''),
-        emergencyContact: String(form.get('emergencyContact') || ''),
-        licenseNumber: String(form.get('licenseNumber') || ''),
-        licenseTypeRestrictions: String(form.get('licenseTypeRestrictions') || ''),
-        licenseExpirationDate: String(form.get('licenseExpirationDate') || ''),
-        status: 'Active',
-        notes: String(form.get('notes') || ''),
-      },
-    ])
+    setDrivers((current) => [...current, driverFromForm(form)])
     setModalOpen(false)
+  }
+  const editingDriver = drivers.find((driver) => driver.id === editId)
+  const editDriver = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingDriver) return
+    const form = new FormData(event.currentTarget)
+    setDrivers((current) => current.map((driver) => driver.id === editingDriver.id ? driverFromForm(form, editingDriver) : driver))
+    setEditId(null)
   }
 
   return (
@@ -660,7 +761,10 @@ function DriversPage({
               <td>{driver.licenseNumber}<small>Expires {dateText(driver.licenseExpirationDate)}</small></td>
               <td>{trips.filter((trip) => trip.driverId === driver.id).length}</td>
               <td><Badge status={driver.status} /></td>
-              <td className="table-actions"><IconLink to={`/drivers/${driver.id}`} title="View driver" /></td>
+              <td className="table-actions">
+                <button className="icon-button" type="button" title="Edit driver" onClick={() => setEditId(driver.id)}><Edit3 size={16} /></button>
+                <IconLink to={`/drivers/${driver.id}`} title="View driver" />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -668,19 +772,35 @@ function DriversPage({
       <Modal title="Add driver" open={modalOpen} onClose={() => setModalOpen(false)}>
         <DriverForm onSubmit={addDriver} />
       </Modal>
+      <Modal title="Edit driver" open={Boolean(editingDriver)} onClose={() => setEditId(null)}>
+        <DriverForm defaultValues={editingDriver} onSubmit={editDriver} submitLabel="Save driver changes" />
+      </Modal>
     </Page>
   )
 }
 
-function DriverDetailsPage({ data }: { data: AppData }) {
+function DriverDetailsPage({
+  data,
+  setDrivers,
+  showToast,
+}: {
+  data: AppData
+  setDrivers: React.Dispatch<React.SetStateAction<Driver[]>>
+  showToast: (toast: Toast) => void
+}) {
   const { id } = useParams()
+  const [editOpen, setEditOpen] = useState(false)
   const driver = data.drivers.find((item) => item.id === id)
   if (!driver) return <NotFound title="Driver not found" />
   const assignedTrips = data.trips.filter((trip) => trip.driverId === driver.id)
   const docs = data.documents.filter((doc) => doc.entityId === driver.id)
   return (
     <Page>
-      <PageHeader eyebrow="Driver details" title={driver.fullName} action={<Badge status={driver.status} />} />
+      <PageHeader
+        eyebrow="Driver details"
+        title={driver.fullName}
+        action={<HeaderActions><BackLink to="/drivers" label="Back to drivers" /><button className="secondary-button" type="button" onClick={() => setEditOpen(true)}><Edit3 size={16} /> Edit</button><Badge status={driver.status} /></HeaderActions>}
+      />
       <DetailGrid items={[
         ['Contact', driver.contactNumber],
         ['Email', driver.email],
@@ -703,6 +823,19 @@ function DriverDetailsPage({ data }: { data: AppData }) {
           </CompactList>
         </Panel>
       </TwoColumn>
+      <Modal title="Edit driver" open={editOpen} onClose={() => setEditOpen(false)}>
+        <DriverForm
+          defaultValues={driver}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            setDrivers((current) => current.map((item) => item.id === driver.id ? driverFromForm(form, driver) : item))
+            setEditOpen(false)
+            showToast({ title: 'Driver updated', detail: `${driver.fullName} changes were saved.` })
+          }}
+          submitLabel="Save driver changes"
+        />
+      </Modal>
     </Page>
   )
 }
@@ -718,27 +851,22 @@ function RentersPage({
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const filtered = renters.filter((renter) => [renter.fullName, renter.email, renter.validIdNumber].join(' ').toLowerCase().includes(query.toLowerCase()))
 
   const addRenter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setRenters((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        fullName: String(form.get('fullName')),
-        address: String(form.get('address') || ''),
-        contactNumber: String(form.get('contactNumber') || ''),
-        email: String(form.get('email') || ''),
-        validIdType: String(form.get('validIdType') || ''),
-        validIdNumber: String(form.get('validIdNumber') || ''),
-        emergencyContact: String(form.get('emergencyContact') || ''),
-        isWatchlisted: false,
-        notes: String(form.get('notes') || ''),
-      },
-    ])
+    setRenters((current) => [...current, renterFromForm(form)])
     setModalOpen(false)
+  }
+  const editingRenter = renters.find((renter) => renter.id === editId)
+  const editRenter = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingRenter) return
+    const form = new FormData(event.currentTarget)
+    setRenters((current) => current.map((renter) => renter.id === editingRenter.id ? renterFromForm(form, editingRenter) : renter))
+    setEditId(null)
   }
 
   return (
@@ -757,7 +885,10 @@ function RentersPage({
               <td>{renter.validIdType}<small>{renter.validIdNumber}</small></td>
               <td>{data.bookings.filter((booking) => booking.renterId === renter.id).length}</td>
               <td>{renter.isWatchlisted ? <Badge status="Watchlist" /> : <Badge status="Clear" />}</td>
-              <td className="table-actions"><IconLink to={`/renters/${renter.id}`} title="View renter" /></td>
+              <td className="table-actions">
+                <button className="icon-button" type="button" title="Edit renter" onClick={() => setEditId(renter.id)}><Edit3 size={16} /></button>
+                <IconLink to={`/renters/${renter.id}`} title="View renter" />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -765,19 +896,35 @@ function RentersPage({
       <Modal title="Add renter" open={modalOpen} onClose={() => setModalOpen(false)}>
         <RenterForm onSubmit={addRenter} />
       </Modal>
+      <Modal title="Edit renter" open={Boolean(editingRenter)} onClose={() => setEditId(null)}>
+        <RenterForm defaultValues={editingRenter} onSubmit={editRenter} submitLabel="Save renter changes" />
+      </Modal>
     </Page>
   )
 }
 
-function RenterDetailsPage({ data }: { data: AppData }) {
+function RenterDetailsPage({
+  data,
+  setRenters,
+  showToast,
+}: {
+  data: AppData
+  setRenters: React.Dispatch<React.SetStateAction<Renter[]>>
+  showToast: (toast: Toast) => void
+}) {
   const { id } = useParams()
+  const [editOpen, setEditOpen] = useState(false)
   const renter = data.renters.find((item) => item.id === id)
   if (!renter) return <NotFound title="Renter not found" />
   const bookings = data.bookings.filter((booking) => booking.renterId === renter.id)
   const trips = data.trips.filter((trip) => trip.renterId === renter.id)
   return (
     <Page>
-      <PageHeader eyebrow="Customer profile" title={renter.fullName} action={renter.isWatchlisted ? <Badge status="Watchlist" /> : <Badge status="Clear" />} />
+      <PageHeader
+        eyebrow="Customer profile"
+        title={renter.fullName}
+        action={<HeaderActions><BackLink to="/renters" label="Back to renters" /><button className="secondary-button" type="button" onClick={() => setEditOpen(true)}><Edit3 size={16} /> Edit</button>{renter.isWatchlisted ? <Badge status="Watchlist" /> : <Badge status="Clear" />}</HeaderActions>}
+      />
       <DetailGrid items={[
         ['Contact', renter.contactNumber],
         ['Email', renter.email],
@@ -795,6 +942,19 @@ function RenterDetailsPage({ data }: { data: AppData }) {
           <CompactList>{trips.map((trip) => <li key={trip.id}><span><strong>{trip.tripNumber}</strong><small>{money.format(trip.grossRevenue)} gross</small></span><Badge status={trip.status} /></li>)}</CompactList>
         </Panel>
       </TwoColumn>
+      <Modal title="Edit renter" open={editOpen} onClose={() => setEditOpen(false)}>
+        <RenterForm
+          defaultValues={renter}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            setRenters((current) => current.map((item) => item.id === renter.id ? renterFromForm(form, renter) : item))
+            setEditOpen(false)
+            showToast({ title: 'Renter updated', detail: `${renter.fullName} changes were saved.` })
+          }}
+          submitLabel="Save renter changes"
+        />
+      </Modal>
     </Page>
   )
 }
@@ -813,6 +973,7 @@ function BookingsPage({
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'All' | BookingStatus>('All')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const filtered = data.bookings
     .filter((booking) => status === 'All' || booking.bookingStatus === status)
     .filter((booking) => [booking.referenceNumber, renterName(data, booking.renterId), vehicleLabel(data, booking.vehicleId)].join(' ').toLowerCase().includes(query.toLowerCase()))
@@ -829,28 +990,26 @@ function BookingsPage({
       return
     }
 
-    setBookings((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        referenceNumber: `BK-2026-${String(current.length + 1).padStart(4, '0')}`,
-        renterId: String(form.get('renterId')),
-        vehicleId,
-        driverId: String(form.get('driverId') || '') || undefined,
-        bookingType: String(form.get('bookingType')) as Booking['bookingType'],
-        startDateTime,
-        endDateTime,
-        pickupLocation: String(form.get('pickupLocation') || ''),
-        returnLocation: String(form.get('returnLocation') || ''),
-        rateType: 'Daily',
-        rateAmount: Number(form.get('rateAmount') || 0),
-        securityDeposit: Number(form.get('securityDeposit') || 0),
-        paymentStatus: 'Unpaid',
-        bookingStatus: 'Pending',
-        notes: String(form.get('notes') || ''),
-      },
-    ])
+    setBookings((current) => [...current, bookingFromForm(form, undefined, `BK-2026-${String(current.length + 1).padStart(4, '0')}`)])
     setModalOpen(false)
+  }
+  const editingBooking = data.bookings.find((booking) => booking.id === editId)
+  const editBooking = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingBooking) return
+    const form = new FormData(event.currentTarget)
+    const vehicleId = String(form.get('vehicleId'))
+    const startDateTime = String(form.get('startDateTime'))
+    const endDateTime = String(form.get('endDateTime'))
+    const conflict = data.bookings.some((booking) => booking.id !== editingBooking.id && booking.vehicleId === vehicleId && ['Pending', 'Confirmed', 'Active'].includes(booking.bookingStatus) && booking.startDateTime < endDateTime && booking.endDateTime > startDateTime)
+    if (conflict) {
+      showToast({ title: 'Booking conflict', detail: 'That vehicle already has an overlapping booking.' })
+      return
+    }
+
+    setBookings((current) => current.map((booking) => booking.id === editingBooking.id ? bookingFromForm(form, editingBooking) : booking))
+    setEditId(null)
+    showToast({ title: 'Booking updated', detail: `${editingBooking.referenceNumber} changes were saved.` })
   }
 
   const convertToTrip = (booking: Booking) => {
@@ -905,6 +1064,7 @@ function BookingsPage({
               <td><Badge status={booking.bookingStatus} /></td>
               <td className="table-actions">
                 <button className="icon-button" type="button" title="Convert to trip" onClick={() => convertToTrip(booking)}><RouteIcon size={16} /></button>
+                <button className="icon-button" type="button" title="Edit booking" onClick={() => setEditId(booking.id)}><Edit3 size={16} /></button>
                 <IconLink to={`/bookings/${booking.id}`} title="View booking" />
               </td>
             </tr>
@@ -914,17 +1074,33 @@ function BookingsPage({
       <Modal title="New booking" open={modalOpen} onClose={() => setModalOpen(false)}>
         <BookingForm data={data} onSubmit={addBooking} />
       </Modal>
+      <Modal title="Edit booking" open={Boolean(editingBooking)} onClose={() => setEditId(null)}>
+        <BookingForm data={data} defaultValues={editingBooking} onSubmit={editBooking} submitLabel="Save booking changes" />
+      </Modal>
     </Page>
   )
 }
 
-function BookingDetailsPage({ data }: { data: AppData }) {
+function BookingDetailsPage({
+  data,
+  setBookings,
+  showToast,
+}: {
+  data: AppData
+  setBookings: React.Dispatch<React.SetStateAction<Booking[]>>
+  showToast: (toast: Toast) => void
+}) {
   const { id } = useParams()
+  const [editOpen, setEditOpen] = useState(false)
   const booking = data.bookings.find((item) => item.id === id)
   if (!booking) return <NotFound title="Booking not found" />
   return (
     <Page>
-      <PageHeader eyebrow="Booking details" title={booking.referenceNumber} action={<Badge status={booking.bookingStatus} />} />
+      <PageHeader
+        eyebrow="Booking details"
+        title={booking.referenceNumber}
+        action={<HeaderActions><BackLink to="/bookings" label="Back to bookings" /><button className="secondary-button" type="button" onClick={() => setEditOpen(true)}><Edit3 size={16} /> Edit</button><Badge status={booking.bookingStatus} /></HeaderActions>}
+      />
       <DetailGrid items={[
         ['Renter', renterName(data, booking.renterId)],
         ['Vehicle', vehicleLabel(data, booking.vehicleId)],
@@ -938,6 +1114,20 @@ function BookingDetailsPage({ data }: { data: AppData }) {
         ['Payment', booking.paymentStatus],
         ['Notes', booking.notes],
       ]} />
+      <Modal title="Edit booking" open={editOpen} onClose={() => setEditOpen(false)}>
+        <BookingForm
+          data={data}
+          defaultValues={booking}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            setBookings((current) => current.map((item) => item.id === booking.id ? bookingFromForm(form, booking) : item))
+            setEditOpen(false)
+            showToast({ title: 'Booking updated', detail: `${booking.referenceNumber} changes were saved.` })
+          }}
+          submitLabel="Save booking changes"
+        />
+      </Modal>
     </Page>
   )
 }
@@ -947,14 +1137,17 @@ function TripsPage({
   setTrips,
   setVehicles,
   showToast,
+  appendTripAudit,
 }: {
   data: AppData
   setTrips: React.Dispatch<React.SetStateAction<Trip[]>>
   setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
   showToast: (toast: Toast) => void
+  appendTripAudit: (entityId: string, action: string, summary: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'All' | TripStatus>('All')
+  const [editId, setEditId] = useState<string | null>(null)
   const filtered = data.trips
     .filter((trip) => status === 'All' || trip.status === status)
     .filter((trip) => [trip.tripNumber, trip.bookingReference, renterName(data, trip.renterId), vehicleLabel(data, trip.vehicleId)].join(' ').toLowerCase().includes(query.toLowerCase()))
@@ -962,6 +1155,7 @@ function TripsPage({
   const startTrip = (trip: Trip) => {
     setTrips((current) => current.map((item) => item.id === trip.id ? { ...item, status: 'Active', startingOdometer: item.startingOdometer || data.vehicles.find((vehicle) => vehicle.id === item.vehicleId)?.currentOdometer || 0 } : item))
     setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Booked' } : vehicle))
+    appendTripAudit(trip.id, 'Trip started', 'Trip status moved to Active and starting odometer was captured.')
     showToast({ title: 'Trip started', detail: `${trip.tripNumber} is now active.` })
   }
 
@@ -969,7 +1163,18 @@ function TripsPage({
     const endingOdometer = (trip.startingOdometer || 0) + 180
     setTrips((current) => current.map((item) => item.id === trip.id ? { ...item, status: 'Completed', endingOdometer, endDateTime: new Date().toISOString(), fuelExpense: item.fuelExpense || 1800, tollExpense: item.tollExpense || 450, driverProceedCommission: item.driverProceedCommission || 1200, paymentStatus: 'Paid' } : item))
     setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Available', currentOdometer: Math.max(vehicle.currentOdometer, endingOdometer) } : vehicle))
+    appendTripAudit(trip.id, 'Trip completed', 'Ending odometer, expenses, payment status, and vehicle availability were updated.')
     showToast({ title: 'Trip completed', detail: `${trip.tripNumber} expenses and odometer were updated.` })
+  }
+  const editingTrip = data.trips.find((trip) => trip.id === editId)
+  const editTrip = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingTrip) return
+    const form = new FormData(event.currentTarget)
+    setTrips((current) => current.map((trip) => trip.id === editingTrip.id ? tripFromForm(form, editingTrip) : trip))
+    appendTripAudit(editingTrip.id, 'Trip edited', 'Trip schedule, assignments, odometer, expenses, or payment fields were changed.')
+    setEditId(null)
+    showToast({ title: 'Trip updated', detail: `${editingTrip.tripNumber} changes were saved.` })
   }
 
   return (
@@ -995,23 +1200,43 @@ function TripsPage({
               <td className="table-actions">
                 {trip.status === 'Scheduled' && <button className="icon-button" type="button" title="Start trip" onClick={() => startTrip(trip)}><CheckCircle2 size={16} /></button>}
                 {trip.status === 'Active' && <button className="icon-button" type="button" title="Complete trip" onClick={() => completeTrip(trip)}><Save size={16} /></button>}
+                <button className="icon-button" type="button" title="Edit trip" onClick={() => setEditId(trip.id)}><Edit3 size={16} /></button>
                 <IconLink to={`/trips/${trip.id}`} title="View trip" />
               </td>
             </tr>
           ))}
         </tbody>
       </Table>
+      <Modal title="Edit trip" open={Boolean(editingTrip)} onClose={() => setEditId(null)}>
+        <TripForm data={data} defaultValues={editingTrip} onSubmit={editTrip} submitLabel="Save trip changes" />
+      </Modal>
     </Page>
   )
 }
 
-function TripDetailsPage({ data }: { data: AppData }) {
+function TripDetailsPage({
+  data,
+  setTrips,
+  showToast,
+  appendTripAudit,
+}: {
+  data: AppData
+  setTrips: React.Dispatch<React.SetStateAction<Trip[]>>
+  showToast: (toast: Toast) => void
+  appendTripAudit: (entityId: string, action: string, summary: string) => void
+}) {
   const { id } = useParams()
+  const [editOpen, setEditOpen] = useState(false)
   const trip = data.trips.find((item) => item.id === id)
   if (!trip) return <NotFound title="Trip not found" />
+  const auditHistory = data.audits.filter((entry) => entry.entityType === 'Trip' && entry.entityId === trip.id)
   return (
     <Page>
-      <PageHeader eyebrow="Trip details" title={trip.tripNumber} action={<Badge status={trip.status} />} />
+      <PageHeader
+        eyebrow="Trip details"
+        title={trip.tripNumber}
+        action={<HeaderActions><BackLink to="/trips" label="Back to trips" /><button className="secondary-button" type="button" onClick={() => setEditOpen(true)}><Edit3 size={16} /> Edit</button><Badge status={trip.status} /></HeaderActions>}
+      />
       <DetailGrid items={[
         ['Booking', trip.bookingReference || 'Direct trip'],
         ['Vehicle', vehicleLabel(data, trip.vehicleId)],
@@ -1026,6 +1251,35 @@ function TripDetailsPage({ data }: { data: AppData }) {
         ['Payment', `${trip.paymentStatus} · ${trip.paymentMethod || 'N/A'}`],
         ['Remarks', trip.remarks],
       ]} />
+      <Panel title="Audit history" action={<History size={18} />}>
+        <CompactList>
+          {auditHistory.map((entry) => (
+            <li key={entry.id}>
+              <span>
+                <strong>{entry.action}</strong>
+                <small>{entry.summary}</small>
+              </span>
+              <small>{entry.actor} - {dateText(entry.createdAt)}</small>
+            </li>
+          ))}
+        </CompactList>
+        {auditHistory.length === 0 && <EmptyState title="No audit history yet" detail="Trip actions will appear here after edits, starts, and completions." />}
+      </Panel>
+      <Modal title="Edit trip" open={editOpen} onClose={() => setEditOpen(false)}>
+        <TripForm
+          data={data}
+          defaultValues={trip}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            setTrips((current) => current.map((item) => item.id === trip.id ? tripFromForm(form, trip) : item))
+            appendTripAudit(trip.id, 'Trip edited', 'Trip details were updated from the detail page.')
+            setEditOpen(false)
+            showToast({ title: 'Trip updated', detail: `${trip.tripNumber} changes were saved.` })
+          }}
+          submitLabel="Save trip changes"
+        />
+      </Modal>
     </Page>
   )
 }
@@ -1034,30 +1288,29 @@ function MaintenancePage({
   data,
   maintenance,
   setMaintenance,
+  showToast,
 }: {
   data: AppData
   maintenance: MaintenanceSchedule[]
   setMaintenance: React.Dispatch<React.SetStateAction<MaintenanceSchedule[]>>
+  showToast: (toast: Toast) => void
 }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const addSchedule = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setMaintenance((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        vehicleId: String(form.get('vehicleId')),
-        title: String(form.get('title') || 'PMS'),
-        dueDate: String(form.get('dueDate')),
-        dueOdometer: Number(form.get('dueOdometer') || 0),
-        status: 'Upcoming',
-        vendorShop: String(form.get('vendorShop') || ''),
-        estimatedCost: Number(form.get('estimatedCost') || 0),
-        notes: String(form.get('notes') || ''),
-      },
-    ])
+    setMaintenance((current) => [...current, maintenanceFromForm(form)])
     setModalOpen(false)
+  }
+  const editingSchedule = maintenance.find((item) => item.id === editId)
+  const editSchedule = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingSchedule) return
+    const form = new FormData(event.currentTarget)
+    setMaintenance((current) => current.map((item) => item.id === editingSchedule.id ? maintenanceFromForm(form, editingSchedule) : item))
+    setEditId(null)
+    showToast({ title: 'PMS updated', detail: `${editingSchedule.title} changes were saved.` })
   }
   return (
     <Page>
@@ -1067,7 +1320,7 @@ function MaintenancePage({
           <article className="record-card" key={item.id}>
             <div className="record-card-head">
               <Wrench size={20} />
-              <Badge status={item.status} />
+              <span className="card-actions"><button className="icon-button" type="button" title="Edit PMS schedule" onClick={() => setEditId(item.id)}><Edit3 size={16} /></button><Badge status={item.status} /></span>
             </div>
             <h3>{item.title}</h3>
             <p>{vehicleLabel(data, item.vehicleId)}</p>
@@ -1083,6 +1336,9 @@ function MaintenancePage({
       <Modal title="Schedule PMS" open={modalOpen} onClose={() => setModalOpen(false)}>
         <MaintenanceForm data={data} onSubmit={addSchedule} />
       </Modal>
+      <Modal title="Edit PMS schedule" open={Boolean(editingSchedule)} onClose={() => setEditId(null)}>
+        <MaintenanceForm data={data} defaultValues={editingSchedule} onSubmit={editSchedule} submitLabel="Save PMS changes" />
+      </Modal>
     </Page>
   )
 }
@@ -1091,32 +1347,32 @@ function DocumentsPage({
   documents,
   setDocuments,
   data,
+  showToast,
 }: {
   documents: DocumentAttachment[]
   setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
   data: AppData
+  showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const filtered = documents.filter((doc) => [doc.entityType, doc.documentType, doc.originalFileName].join(' ').toLowerCase().includes(query.toLowerCase()))
 
   const addDocument = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setDocuments((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        entityType: String(form.get('entityType')),
-        entityId: String(form.get('entityId')),
-        originalFileName: String(form.get('originalFileName') || 'uploaded-document.pdf'),
-        fileUrl: '#',
-        documentType: String(form.get('documentType')),
-        expirationDate: String(form.get('expirationDate') || ''),
-        uploadedAt: new Date().toISOString(),
-      },
-    ])
+    setDocuments((current) => [...current, documentFromForm(form)])
     setModalOpen(false)
+  }
+  const editingDocument = documents.find((doc) => doc.id === editId)
+  const editDocument = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingDocument) return
+    const form = new FormData(event.currentTarget)
+    setDocuments((current) => current.map((doc) => doc.id === editingDocument.id ? documentFromForm(form, editingDocument) : doc))
+    setEditId(null)
+    showToast({ title: 'Document updated', detail: `${editingDocument.documentType} changes were saved.` })
   }
 
   return (
@@ -1125,7 +1381,7 @@ function DocumentsPage({
       <Toolbar query={query} setQuery={setQuery} placeholder="Search documents" />
       <Table>
         <thead>
-          <tr><th>Document</th><th>Entity</th><th>Expiration</th><th>Uploaded</th><th>Status</th></tr>
+          <tr><th>Document</th><th>Entity</th><th>Expiration</th><th>Uploaded</th><th>Status</th><th aria-label="Actions" /></tr>
         </thead>
         <tbody>
           {filtered.map((doc) => (
@@ -1135,12 +1391,16 @@ function DocumentsPage({
               <td>{dateText(doc.expirationDate)}</td>
               <td>{dateText(doc.uploadedAt)}</td>
               <td><Badge status={doc.expirationDate ? (daysUntil(doc.expirationDate) < 0 ? 'Expired' : daysUntil(doc.expirationDate) <= 7 ? 'Due Soon' : 'Clear') : 'Clear'} /></td>
+              <td className="table-actions"><button className="icon-button" type="button" title="Edit document" onClick={() => setEditId(doc.id)}><Edit3 size={16} /></button></td>
             </tr>
           ))}
         </tbody>
       </Table>
       <Modal title="Upload document" open={modalOpen} onClose={() => setModalOpen(false)}>
         <DocumentForm data={data} onSubmit={addDocument} />
+      </Modal>
+      <Modal title="Edit document" open={Boolean(editingDocument)} onClose={() => setEditId(null)}>
+        <DocumentForm data={data} defaultValues={editingDocument} onSubmit={editDocument} submitLabel="Save document changes" />
       </Modal>
     </Page>
   )
@@ -1229,30 +1489,117 @@ function ReportsPage({ data }: { data: AppData }) {
 function SettingsPage({
   company,
   setCompany,
+  session,
+  setSession,
+  userProfile,
+  setUserProfile,
   showToast,
 }: {
   company: CompanyProfile
   setCompany: React.Dispatch<React.SetStateAction<CompanyProfile>>
+  session: AuthSession | null
+  setSession: React.Dispatch<React.SetStateAction<AuthSession | null>>
+  userProfile: UserProfile
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   showToast: (toast: Toast) => void
 }) {
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    setCompany({
+    const nextCompany = {
       name: String(form.get('name')),
       address: String(form.get('address')),
       contactNumber: String(form.get('contactNumber')),
-    })
-    showToast({ title: 'Settings saved', detail: 'Company profile changes were applied.' })
+      birDtiLguDocumentUrl: String(form.get('birDtiLguDocumentUrl') || ''),
+      logoUrl: String(form.get('logoUrl') || ''),
+    }
+    const nextProfile = {
+      fullName: String(form.get('fullName')),
+      email: userProfile.email || session?.email || '',
+      profilePhotoUrl: String(form.get('profilePhotoUrl') || ''),
+      address: String(form.get('userAddress') || ''),
+      mobileNumber: String(form.get('mobileNumber') || ''),
+      jobTitle: String(form.get('jobTitle') || ''),
+      emergencyContact: String(form.get('emergencyContact') || ''),
+      timezone: String(form.get('timezone') || 'Asia/Manila'),
+      dateFormat: String(form.get('dateFormat') || 'MMM d, yyyy'),
+      notificationEmail: String(form.get('notificationEmail') || userProfile.email || ''),
+    }
+    setCompany(nextCompany)
+    setUserProfile(nextProfile)
+    if (session) {
+      const nextSession = { ...session, fullName: nextProfile.fullName }
+      setSession(nextSession)
+      window.localStorage.setItem(authStorageKey, JSON.stringify(nextSession))
+    }
+    showToast({ title: 'Settings saved', detail: 'User and company details were updated.' })
+  }
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!session?.token) {
+      showToast({ title: 'Password not changed', detail: 'Please sign in again before changing your password.' })
+      return
+    }
+
+    const form = new FormData(event.currentTarget)
+    const currentPassword = String(form.get('currentPassword'))
+    const newPassword = String(form.get('newPassword'))
+    const confirmPassword = String(form.get('confirmPassword'))
+    if (newPassword !== confirmPassword) {
+      showToast({ title: 'Password not changed', detail: 'New password and confirmation do not match.' })
+      return
+    }
+
+    try {
+      await postJson('/api/auth/change-password', { currentPassword, newPassword }, session.token)
+      event.currentTarget.reset()
+      showToast({ title: 'Password changed', detail: 'Use the new password the next time you sign in.' })
+    } catch (error) {
+      showToast({ title: 'Password not changed', detail: error instanceof Error ? error.message : 'Please check the current password.' })
+    }
   }
   return (
     <Page>
       <PageHeader eyebrow="Workspace" title="Settings" />
-      <form className="form-panel" onSubmit={save}>
-        <Field label="Company name" name="name" defaultValue={company.name} required />
-        <Field label="Business address" name="address" defaultValue={company.address} />
-        <Field label="Contact number" name="contactNumber" defaultValue={company.contactNumber} />
-        <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save settings</button></div>
+      <form className="settings-grid" onSubmit={save}>
+        <Panel title="Super user profile">
+          <div className="settings-avatar-row">
+            <span className="avatar-preview">{userProfile.profilePhotoUrl ? <img src={userProfile.profilePhotoUrl} alt="" /> : initials(userProfile.fullName || session?.fullName)}</span>
+            <label className="field">
+              <span><Camera size={14} /> Profile photo</span>
+              <input name="profilePhotoFile" type="file" accept="image/*" />
+            </label>
+          </div>
+          <div className="form-grid">
+            <Field label="Full name" name="fullName" defaultValue={userProfile.fullName || session?.fullName || ''} required />
+            <Field label="Email" name="email" type="email" defaultValue={userProfile.email || session?.email || ''} readOnly />
+            <Field label="Profile photo URL" name="profilePhotoUrl" defaultValue={userProfile.profilePhotoUrl} />
+            <Field label="Mobile number" name="mobileNumber" defaultValue={userProfile.mobileNumber} />
+            <Field label="Address" name="userAddress" defaultValue={userProfile.address} />
+            <Field label="Job title" name="jobTitle" defaultValue={userProfile.jobTitle} />
+            <Field label="Emergency contact" name="emergencyContact" defaultValue={userProfile.emergencyContact} />
+            <Field label="Notification email" name="notificationEmail" type="email" defaultValue={userProfile.notificationEmail} />
+            <label className="field"><span>Timezone</span><select name="timezone" defaultValue={userProfile.timezone}><option>Asia/Manila</option><option>UTC</option><option>Asia/Singapore</option></select></label>
+            <label className="field"><span>Date format</span><select name="dateFormat" defaultValue={userProfile.dateFormat}><option>MMM d, yyyy</option><option>yyyy-MM-dd</option><option>MM/dd/yyyy</option></select></label>
+          </div>
+        </Panel>
+        <Panel title="Tenant company profile">
+          <div className="form-grid">
+            <Field label="Company name" name="name" defaultValue={company.name} required />
+            <Field label="Business address" name="address" defaultValue={company.address} />
+            <Field label="Contact number" name="contactNumber" defaultValue={company.contactNumber} />
+            <Field label="Logo URL" name="logoUrl" defaultValue={company.logoUrl} />
+            <Field label="BIR / DTI / LGU document URL" name="birDtiLguDocumentUrl" defaultValue={company.birDtiLguDocumentUrl} />
+          </div>
+        </Panel>
+        <div className="form-actions settings-actions"><button className="primary-button" type="submit"><Save size={18} /> Save settings</button></div>
+      </form>
+      <form className="form-panel" onSubmit={changePassword}>
+        <h2>Change password</h2>
+        <Field label="Current password" name="currentPassword" type="password" required />
+        <Field label="New password" name="newPassword" type="password" required />
+        <Field label="Confirm new password" name="confirmPassword" type="password" required />
+        <div className="form-actions"><button className="primary-button" type="submit"><KeyRound size={18} /> Change password</button></div>
       </form>
     </Page>
   )
@@ -1272,7 +1619,7 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
       })
 
       if (auth.requiresEmailVerification) {
-        showToast({ title: 'Verify your email', detail: 'Open the MetroBeez FMS verification email before logging in.' })
+        showToast({ title: 'Verify your email', detail: 'Open the BeezFleet verification email before logging in.' })
         navigate(`/verify-email?email=${encodeURIComponent(auth.email)}`)
         return
       }
@@ -1284,7 +1631,7 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
       }
 
       onAuthenticated(auth)
-      showToast({ title: 'Welcome back', detail: 'You are signed in to MetroBeez FMS.' })
+      showToast({ title: 'Welcome back', detail: 'You are signed in to BeezFleet.' })
       navigate(auth.requiresOnboarding ? '/onboarding' : '/dashboard')
     } catch (error) {
       showToast({ title: 'Login failed', detail: error instanceof Error ? error.message : 'Please check your credentials.' })
@@ -1293,12 +1640,91 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
     }
   }
   return (
-    <AuthShell title="Login" subtitle="MetroBeez FMS">
+    <AuthShell title="Login" subtitle="BeezFleet">
       <form className="auth-form" onSubmit={submit}>
         <Field label="Email" name="email" type="email" required />
         <Field label="Password" name="password" type="password" required />
         <button className="primary-button full" type="submit" disabled={submitting}><ShieldCheck size={18} /> {submitting ? 'Logging in...' : 'Login'}</button>
+        <Link to="/forgot-password">Forgot password?</Link>
         <Link to="/register">Create an account</Link>
+      </form>
+    </AuthShell>
+  )
+}
+
+function ForgotPasswordPage({ showToast }: { showToast: (toast: Toast) => void }) {
+  const navigate = useNavigate()
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    const form = new FormData(event.currentTarget)
+    try {
+      await postJson('/api/auth/forgot-password', {
+        email: String(form.get('email')),
+      })
+      showToast({ title: 'Reset email sent', detail: 'Check your inbox and spam folder for the password reset link.' })
+      navigate('/login')
+    } catch (error) {
+      showToast({ title: 'Reset email failed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AuthShell title="Forgot password" subtitle="BeezFleet">
+      <form className="auth-form" onSubmit={submit}>
+        <Field label="Email" name="email" type="email" required />
+        <button className="primary-button full" type="submit" disabled={submitting}><MailCheck size={18} /> {submitting ? 'Sending...' : 'Send reset link'}</button>
+        <Link to="/login">Back to login</Link>
+      </form>
+    </AuthShell>
+  )
+}
+
+function ResetPasswordPage({ showToast }: { showToast: (toast: Toast) => void }) {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    const form = new FormData(event.currentTarget)
+    const newPassword = String(form.get('newPassword'))
+    const confirmPassword = String(form.get('confirmPassword'))
+    if (newPassword !== confirmPassword) {
+      showToast({ title: 'Password not reset', detail: 'New password and confirmation do not match.' })
+      setSubmitting(false)
+      return
+    }
+
+    try {
+      await postJson('/api/auth/reset-password', {
+        email: String(form.get('email')),
+        token: String(form.get('token')),
+        newPassword,
+      })
+      showToast({ title: 'Password reset', detail: 'You can now sign in with your new password.' })
+      navigate('/login')
+    } catch (error) {
+      showToast({ title: 'Password not reset', detail: error instanceof Error ? error.message : 'Please request a new reset link.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+  const email = searchParams.get('email') ?? ''
+  const token = searchParams.get('token') ?? ''
+
+  return (
+    <AuthShell title="Reset password" subtitle="BeezFleet">
+      <form className="auth-form" onSubmit={submit}>
+        <Field label="Email" name="email" type="email" defaultValue={email} required />
+        <Field label="Reset token" name="token" defaultValue={token} required />
+        <Field label="New password" name="newPassword" type="password" required />
+        <Field label="Confirm new password" name="confirmPassword" type="password" required />
+        <button className="primary-button full" type="submit" disabled={submitting}><KeyRound size={18} /> {submitting ? 'Resetting...' : 'Reset password'}</button>
+        <Link to="/login">Back to login</Link>
       </form>
     </AuthShell>
   )
@@ -1327,7 +1753,7 @@ function RegisterPage({ showToast }: { showToast: (toast: Toast) => void }) {
     }
   }
   return (
-    <AuthShell title="Create account" subtitle="MetroBeez FMS">
+    <AuthShell title="Create account" subtitle="BeezFleet">
       <form className="auth-form" onSubmit={submit}>
         <Field label="Full name" name="fullName" required />
         <Field label="Email" name="email" type="email" required />
@@ -1365,7 +1791,7 @@ function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (aut
   const email = searchParams.get('email') ?? ''
   const token = searchParams.get('token') ?? ''
   return (
-    <AuthShell title="Verify email" subtitle="MetroBeez FMS">
+    <AuthShell title="Verify email" subtitle="BeezFleet">
       <form className="auth-form" onSubmit={submit}>
         <Field label="Email" name="email" type="email" defaultValue={email} required />
         <Field label="Verification token" name="token" defaultValue={token} required />
@@ -1438,103 +1864,209 @@ function OnboardingPage({
   )
 }
 
-function VehicleForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function VehicleForm({
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save vehicle',
+}: {
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: Vehicle
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <Field label="Plate number" name="plateNumber" required />
-      <Field label="Make" name="make" required />
-      <Field label="Model" name="model" required />
-      <Field label="Series / variant" name="seriesVariant" />
-      <Field label="Year model" name="yearModel" type="number" defaultValue="2026" />
-      <Field label="Color" name="color" />
-      <Field label="Vehicle type" name="vehicleType" defaultValue="Sedan" />
-      <Field label="Body type" name="bodyType" />
-      <Field label="Fuel type" name="fuelType" defaultValue="Gasoline" />
-      <Field label="Capacity" name="passengerCapacity" type="number" defaultValue="4" />
-      <Field label="Current odometer" name="currentOdometer" type="number" defaultValue="0" />
-      <label className="field"><span>Status</span><select name="status" defaultValue="Available"><option>Available</option><option>Booked</option><option>Under Maintenance</option><option>Inactive</option></select></label>
-      <Field label="Remarks" name="remarks" />
-      <button className="primary-button full" type="submit"><Save size={18} /> Save vehicle</button>
+      <Field label="Plate number" name="plateNumber" defaultValue={defaultValues?.plateNumber} required />
+      <Field label="MV file number" name="mvFileNumber" defaultValue={defaultValues?.mvFileNumber} />
+      <Field label="Engine number" name="engineNumber" defaultValue={defaultValues?.engineNumber} />
+      <Field label="Chassis / VIN" name="chassisVinNumber" defaultValue={defaultValues?.chassisVinNumber} />
+      <Field label="Make" name="make" defaultValue={defaultValues?.make} required />
+      <Field label="Model" name="model" defaultValue={defaultValues?.model} required />
+      <Field label="Series / variant" name="seriesVariant" defaultValue={defaultValues?.seriesVariant} />
+      <Field label="Year model" name="yearModel" type="number" defaultValue={String(defaultValues?.yearModel ?? 2026)} />
+      <Field label="Color" name="color" defaultValue={defaultValues?.color} />
+      <Field label="Vehicle type" name="vehicleType" defaultValue={defaultValues?.vehicleType ?? 'Sedan'} />
+      <Field label="Body type" name="bodyType" defaultValue={defaultValues?.bodyType} />
+      <Field label="Fuel type" name="fuelType" defaultValue={defaultValues?.fuelType ?? 'Gasoline'} />
+      <Field label="Capacity" name="passengerCapacity" type="number" defaultValue={String(defaultValues?.passengerCapacity ?? 4)} />
+      <Field label="Classification" name="classification" defaultValue={defaultValues?.classification ?? 'Private'} />
+      <Field label="Gross weight" name="grossWeight" defaultValue={defaultValues?.grossWeight} />
+      <Field label="Current odometer" name="currentOdometer" type="number" defaultValue={String(defaultValues?.currentOdometer ?? 0)} />
+      <label className="field"><span>Ownership</span><select name="ownershipStatus" defaultValue={defaultValues?.ownershipStatus ?? 'Owned'}><option>Owned</option><option>Financed</option><option>Leased</option></select></label>
+      <label className="field"><span>Status</span><select name="status" defaultValue={defaultValues?.status ?? 'Available'}><option>Available</option><option>Booked</option><option>Under Maintenance</option><option>Inactive</option></select></label>
+      <Field label="Remarks" name="remarks" defaultValue={defaultValues?.remarks} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
     </form>
   )
 }
 
-function DriverForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function DriverForm({
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save driver',
+}: {
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: Driver
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <Field label="Full name" name="fullName" required />
-      <Field label="Address" name="address" />
-      <Field label="Contact number" name="contactNumber" />
-      <Field label="Email" name="email" type="email" />
-      <Field label="Emergency contact" name="emergencyContact" />
-      <Field label="License number" name="licenseNumber" />
-      <Field label="License type / restrictions" name="licenseTypeRestrictions" />
-      <Field label="License expiration" name="licenseExpirationDate" type="date" />
-      <Field label="Notes" name="notes" />
-      <button className="primary-button full" type="submit"><Save size={18} /> Save driver</button>
+      <Field label="Full name" name="fullName" defaultValue={defaultValues?.fullName} required />
+      <Field label="Address" name="address" defaultValue={defaultValues?.address} />
+      <Field label="Contact number" name="contactNumber" defaultValue={defaultValues?.contactNumber} />
+      <Field label="Email" name="email" type="email" defaultValue={defaultValues?.email} />
+      <Field label="Emergency contact" name="emergencyContact" defaultValue={defaultValues?.emergencyContact} />
+      <Field label="License number" name="licenseNumber" defaultValue={defaultValues?.licenseNumber} />
+      <Field label="License type / restrictions" name="licenseTypeRestrictions" defaultValue={defaultValues?.licenseTypeRestrictions} />
+      <Field label="License expiration" name="licenseExpirationDate" type="date" defaultValue={defaultValues?.licenseExpirationDate} />
+      <label className="field"><span>Status</span><select name="status" defaultValue={defaultValues?.status ?? 'Active'}><option>Active</option><option>Inactive</option><option>Suspended</option></select></label>
+      <Field label="Notes" name="notes" defaultValue={defaultValues?.notes} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
     </form>
   )
 }
 
-function RenterForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function RenterForm({
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save renter',
+}: {
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: Renter
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <Field label="Full name" name="fullName" required />
-      <Field label="Address" name="address" />
-      <Field label="Contact number" name="contactNumber" />
-      <Field label="Email" name="email" type="email" />
-      <Field label="Valid ID type" name="validIdType" />
-      <Field label="Valid ID number" name="validIdNumber" />
-      <Field label="Emergency contact" name="emergencyContact" />
-      <Field label="Notes" name="notes" />
-      <button className="primary-button full" type="submit"><Save size={18} /> Save renter</button>
+      <Field label="Full name" name="fullName" defaultValue={defaultValues?.fullName} required />
+      <Field label="Address" name="address" defaultValue={defaultValues?.address} />
+      <Field label="Contact number" name="contactNumber" defaultValue={defaultValues?.contactNumber} />
+      <Field label="Email" name="email" type="email" defaultValue={defaultValues?.email} />
+      <Field label="Valid ID type" name="validIdType" defaultValue={defaultValues?.validIdType} />
+      <Field label="Valid ID number" name="validIdNumber" defaultValue={defaultValues?.validIdNumber} />
+      <Field label="Driver license" name="driverLicenseNumber" defaultValue={defaultValues?.driverLicenseNumber} />
+      <Field label="Emergency contact" name="emergencyContact" defaultValue={defaultValues?.emergencyContact} />
+      <label className="field"><span>Risk flag</span><select name="isWatchlisted" defaultValue={defaultValues?.isWatchlisted ? 'true' : 'false'}><option value="false">Clear</option><option value="true">Watchlist</option></select></label>
+      <Field label="Notes" name="notes" defaultValue={defaultValues?.notes} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
     </form>
   )
 }
 
-function BookingForm({ data, onSubmit }: { data: AppData; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function BookingForm({
+  data,
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save booking',
+}: {
+  data: AppData
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: Booking
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <label className="field"><span>Renter</span><select name="renterId">{data.renters.map((renter) => <option key={renter.id} value={renter.id}>{renter.fullName}</option>)}</select></label>
-      <label className="field"><span>Vehicle</span><select name="vehicleId">{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} - {vehicle.make} {vehicle.model}</option>)}</select></label>
-      <label className="field"><span>Driver</span><select name="driverId"><option value="">Optional</option>{data.drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}</select></label>
-      <label className="field"><span>Booking type</span><select name="bookingType"><option>Self-drive</option><option>With driver</option><option>Delivery/logistics</option><option>Corporate lease</option></select></label>
-      <Field label="Start" name="startDateTime" type="datetime-local" required />
-      <Field label="End" name="endDateTime" type="datetime-local" required />
-      <Field label="Pickup location" name="pickupLocation" />
-      <Field label="Return location" name="returnLocation" />
-      <Field label="Rate amount" name="rateAmount" type="number" defaultValue="3500" />
-      <Field label="Security deposit" name="securityDeposit" type="number" defaultValue="0" />
-      <Field label="Notes" name="notes" />
-      <button className="primary-button full" type="submit"><Save size={18} /> Save booking</button>
+      <label className="field"><span>Renter</span><select name="renterId" defaultValue={defaultValues?.renterId}>{data.renters.map((renter) => <option key={renter.id} value={renter.id}>{renter.fullName}</option>)}</select></label>
+      <label className="field"><span>Vehicle</span><select name="vehicleId" defaultValue={defaultValues?.vehicleId}>{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} - {vehicle.make} {vehicle.model}</option>)}</select></label>
+      <label className="field"><span>Driver</span><select name="driverId" defaultValue={defaultValues?.driverId ?? ''}><option value="">Optional</option>{data.drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}</select></label>
+      <label className="field"><span>Booking type</span><select name="bookingType" defaultValue={defaultValues?.bookingType ?? 'Self-drive'}><option>Self-drive</option><option>With driver</option><option>Delivery/logistics</option><option>Corporate lease</option></select></label>
+      <Field label="Start" name="startDateTime" type="datetime-local" defaultValue={dateTimeInputValue(defaultValues?.startDateTime)} required />
+      <Field label="End" name="endDateTime" type="datetime-local" defaultValue={dateTimeInputValue(defaultValues?.endDateTime)} required />
+      <Field label="Pickup location" name="pickupLocation" defaultValue={defaultValues?.pickupLocation} />
+      <Field label="Return location" name="returnLocation" defaultValue={defaultValues?.returnLocation} />
+      <label className="field"><span>Rate type</span><select name="rateType" defaultValue={defaultValues?.rateType ?? 'Daily'}><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Custom</option></select></label>
+      <Field label="Rate amount" name="rateAmount" type="number" defaultValue={String(defaultValues?.rateAmount ?? 3500)} />
+      <Field label="Security deposit" name="securityDeposit" type="number" defaultValue={String(defaultValues?.securityDeposit ?? 0)} />
+      <label className="field"><span>Payment status</span><select name="paymentStatus" defaultValue={defaultValues?.paymentStatus ?? 'Unpaid'}><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Refunded</option></select></label>
+      <label className="field"><span>Booking status</span><select name="bookingStatus" defaultValue={defaultValues?.bookingStatus ?? 'Pending'}><option>Pending</option><option>Confirmed</option><option>Active</option><option>Completed</option><option>Cancelled</option></select></label>
+      <Field label="Notes" name="notes" defaultValue={defaultValues?.notes} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
     </form>
   )
 }
 
-function MaintenanceForm({ data, onSubmit }: { data: AppData; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function TripForm({
+  data,
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save trip',
+}: {
+  data: AppData
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: Trip
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <label className="field"><span>Vehicle</span><select name="vehicleId">{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} - {vehicle.make} {vehicle.model}</option>)}</select></label>
-      <Field label="Title" name="title" defaultValue="PMS" />
-      <Field label="Due date" name="dueDate" type="date" required />
-      <Field label="Due odometer" name="dueOdometer" type="number" />
-      <Field label="Vendor / shop" name="vendorShop" />
-      <Field label="Estimated cost" name="estimatedCost" type="number" />
-      <Field label="Notes" name="notes" />
-      <button className="primary-button full" type="submit"><Save size={18} /> Save schedule</button>
+      <label className="field"><span>Vehicle</span><select name="vehicleId" defaultValue={defaultValues?.vehicleId}>{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} - {vehicle.make} {vehicle.model}</option>)}</select></label>
+      <label className="field"><span>Driver</span><select name="driverId" defaultValue={defaultValues?.driverId ?? ''}><option value="">Optional</option>{data.drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}</select></label>
+      <label className="field"><span>Renter</span><select name="renterId" defaultValue={defaultValues?.renterId}>{data.renters.map((renter) => <option key={renter.id} value={renter.id}>{renter.fullName}</option>)}</select></label>
+      <label className="field"><span>Trip type</span><select name="tripType" defaultValue={defaultValues?.tripType ?? 'Rental'}><option>Rental</option><option>Delivery</option><option>Private booking</option><option>Corporate</option><option>Other</option></select></label>
+      <Field label="Booking reference" name="bookingReference" defaultValue={defaultValues?.bookingReference} />
+      <Field label="Start" name="startDateTime" type="datetime-local" defaultValue={dateTimeInputValue(defaultValues?.startDateTime)} required />
+      <Field label="End" name="endDateTime" type="datetime-local" defaultValue={dateTimeInputValue(defaultValues?.endDateTime)} />
+      <Field label="Starting odometer" name="startingOdometer" type="number" defaultValue={String(defaultValues?.startingOdometer ?? '')} />
+      <Field label="Ending odometer" name="endingOdometer" type="number" defaultValue={String(defaultValues?.endingOdometer ?? '')} />
+      <Field label="Fuel expense" name="fuelExpense" type="number" defaultValue={String(defaultValues?.fuelExpense ?? 0)} />
+      <Field label="Toll expense" name="tollExpense" type="number" defaultValue={String(defaultValues?.tollExpense ?? 0)} />
+      <Field label="Parking expense" name="parkingExpense" type="number" defaultValue={String(defaultValues?.parkingExpense ?? 0)} />
+      <Field label="Other expenses" name="otherExpenses" type="number" defaultValue={String(defaultValues?.otherExpenses ?? 0)} />
+      <Field label="Gross revenue" name="grossRevenue" type="number" defaultValue={String(defaultValues?.grossRevenue ?? 0)} />
+      <Field label="Driver proceed / commission" name="driverProceedCommission" type="number" defaultValue={String(defaultValues?.driverProceedCommission ?? 0)} />
+      <Field label="Payment method" name="paymentMethod" defaultValue={defaultValues?.paymentMethod} />
+      <label className="field"><span>Payment status</span><select name="paymentStatus" defaultValue={defaultValues?.paymentStatus ?? 'Unpaid'}><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Refunded</option></select></label>
+      <label className="field"><span>Status</span><select name="status" defaultValue={defaultValues?.status ?? 'Scheduled'}><option>Scheduled</option><option>Active</option><option>Completed</option><option>Cancelled</option></select></label>
+      <Field label="Remarks" name="remarks" defaultValue={defaultValues?.remarks} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
     </form>
   )
 }
 
-function DocumentForm({ data, onSubmit }: { data: AppData; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function MaintenanceForm({
+  data,
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Save schedule',
+}: {
+  data: AppData
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: MaintenanceSchedule
+  submitLabel?: string
+}) {
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <label className="field"><span>Entity type</span><select name="entityType"><option>Vehicle</option><option>Driver</option><option>Renter</option><option>Booking</option><option>Trip</option></select></label>
-      <label className="field"><span>Entity</span><select name="entityId">{[...data.vehicles, ...data.drivers, ...data.renters].map((item) => <option key={item.id} value={item.id}>{'plateNumber' in item ? item.plateNumber : item.fullName}</option>)}</select></label>
-      <Field label="Document type" name="documentType" required />
-      <Field label="Original file name" name="originalFileName" defaultValue="document.pdf" />
-      <Field label="Expiration date" name="expirationDate" type="date" />
-      <button className="primary-button full" type="submit"><Upload size={18} /> Upload document</button>
+      <label className="field"><span>Vehicle</span><select name="vehicleId" defaultValue={defaultValues?.vehicleId}>{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} - {vehicle.make} {vehicle.model}</option>)}</select></label>
+      <Field label="Title" name="title" defaultValue={defaultValues?.title ?? 'PMS'} />
+      <Field label="Due date" name="dueDate" type="date" defaultValue={defaultValues?.dueDate} required />
+      <Field label="Due odometer" name="dueOdometer" type="number" defaultValue={String(defaultValues?.dueOdometer ?? '')} />
+      <label className="field"><span>Status</span><select name="status" defaultValue={defaultValues?.status ?? 'Upcoming'}><option>Upcoming</option><option>Due Soon</option><option>Overdue</option><option>Completed</option></select></label>
+      <Field label="Vendor / shop" name="vendorShop" defaultValue={defaultValues?.vendorShop} />
+      <Field label="Estimated cost" name="estimatedCost" type="number" defaultValue={String(defaultValues?.estimatedCost ?? 0)} />
+      <Field label="Notes" name="notes" defaultValue={defaultValues?.notes} />
+      <button className="primary-button full" type="submit"><Save size={18} /> {submitLabel}</button>
+    </form>
+  )
+}
+
+function DocumentForm({
+  data,
+  onSubmit,
+  defaultValues,
+  submitLabel = 'Upload document',
+}: {
+  data: AppData
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  defaultValues?: DocumentAttachment
+  submitLabel?: string
+}) {
+  const entityOptions = documentEntityOptions(data)
+  return (
+    <form className="modal-form" onSubmit={onSubmit}>
+      <label className="field"><span>Entity type</span><select name="entityType" defaultValue={defaultValues?.entityType ?? 'Vehicle'}><option>Vehicle</option><option>Driver</option><option>Renter</option><option>Booking</option><option>Trip</option></select></label>
+      <label className="field"><span>Entity</span><select name="entityId" defaultValue={defaultValues?.entityId}>{entityOptions.map((item) => <option key={`${item.entityType}-${item.id}`} value={item.id}>{item.label}</option>)}</select></label>
+      <Field label="Document type" name="documentType" defaultValue={defaultValues?.documentType} required />
+      <Field label="Original file name" name="originalFileName" defaultValue={defaultValues?.originalFileName ?? 'document.pdf'} />
+      <Field label="File URL" name="fileUrl" defaultValue={defaultValues?.fileUrl ?? '#'} />
+      <Field label="Expiration date" name="expirationDate" type="date" defaultValue={defaultValues?.expirationDate} />
+      <button className="primary-button full" type="submit"><Upload size={18} /> {submitLabel}</button>
     </form>
   )
 }
@@ -1550,6 +2082,14 @@ function PageHeader({ eyebrow, title, action }: { eyebrow: string; title: string
       {action}
     </div>
   )
+}
+
+function HeaderActions({ children }: { children: React.ReactNode }) {
+  return <div className="header-actions">{children}</div>
+}
+
+function BackLink({ to, label }: { to: string; label: string }) {
+  return <Link className="secondary-button" to={to}><ArrowLeft size={16} /> {label}</Link>
 }
 
 function MetricCard({ icon: Icon, label, value, tone }: { icon: typeof Car; label: string; value: string; tone: string }) {
@@ -1643,15 +2183,29 @@ function TwoColumn({ children }: { children: React.ReactNode }) {
   return <section className="two-column">{children}</section>
 }
 
-function Field({ label, name, type = 'text', defaultValue, required }: { label: string; name: string; type?: string; defaultValue?: string; required?: boolean }) {
-  return <label className="field"><span>{label}</span><input name={name} type={type} defaultValue={defaultValue} required={required} /></label>
+function Field({
+  label,
+  name,
+  type = 'text',
+  defaultValue,
+  required,
+  readOnly,
+}: {
+  label: string
+  name: string
+  type?: string
+  defaultValue?: string
+  required?: boolean
+  readOnly?: boolean
+}) {
+  return <label className="field"><span>{label}</span><input name={name} type={type} defaultValue={defaultValue} required={required} readOnly={readOnly} /></label>
 }
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <main className="auth-shell">
       <section className="auth-panel">
-        <div className="brand auth-brand"><span className="brand-mark">MB</span><span><strong>MetroBeez FMS</strong><small>{subtitle}</small></span></div>
+        <div className="brand auth-brand"><span className="brand-mark">BF</span><span><strong>BeezFleet</strong><small>{subtitle}</small></span></div>
         <h1>{title}</h1>
         {children}
       </section>
@@ -1734,6 +2288,172 @@ function daysUntil(value?: string) {
   if (!value) return 999
   const diff = new Date(value).getTime() - new Date('2026-05-15T00:00:00').getTime()
   return Math.ceil(diff / 86_400_000)
+}
+
+function formString(form: FormData, name: string, fallback?: string) {
+  const value = form.get(name)
+  return typeof value === 'string' && value.length > 0 ? value : fallback ?? ''
+}
+
+function formNumber(form: FormData, name: string, fallback = 0) {
+  const value = Number(form.get(name))
+  return Number.isFinite(value) ? value : fallback
+}
+
+function formOptionalNumber(form: FormData, name: string) {
+  const raw = form.get(name)
+  if (raw === null || raw === '') return undefined
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : undefined
+}
+
+function vehicleFromForm(form: FormData, existing?: Vehicle): Vehicle {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    plateNumber: formString(form, 'plateNumber', existing?.plateNumber),
+    mvFileNumber: formString(form, 'mvFileNumber', existing?.mvFileNumber),
+    engineNumber: formString(form, 'engineNumber', existing?.engineNumber),
+    chassisVinNumber: formString(form, 'chassisVinNumber', existing?.chassisVinNumber),
+    make: formString(form, 'make', existing?.make),
+    model: formString(form, 'model', existing?.model),
+    seriesVariant: formString(form, 'seriesVariant', existing?.seriesVariant),
+    yearModel: formNumber(form, 'yearModel', existing?.yearModel ?? new Date().getFullYear()),
+    color: formString(form, 'color', existing?.color),
+    vehicleType: formString(form, 'vehicleType', existing?.vehicleType ?? 'Sedan'),
+    bodyType: formString(form, 'bodyType', existing?.bodyType),
+    fuelType: formString(form, 'fuelType', existing?.fuelType ?? 'Gasoline'),
+    passengerCapacity: formNumber(form, 'passengerCapacity', existing?.passengerCapacity ?? 4),
+    classification: formString(form, 'classification', existing?.classification ?? 'Private'),
+    grossWeight: formString(form, 'grossWeight', existing?.grossWeight),
+    currentOdometer: formNumber(form, 'currentOdometer', existing?.currentOdometer ?? 0),
+    ownershipStatus: formString(form, 'ownershipStatus', existing?.ownershipStatus ?? 'Owned') as Vehicle['ownershipStatus'],
+    status: formString(form, 'status', existing?.status ?? 'Available') as VehicleStatus,
+    remarks: formString(form, 'remarks', existing?.remarks),
+  }
+}
+
+function driverFromForm(form: FormData, existing?: Driver): Driver {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    fullName: formString(form, 'fullName', existing?.fullName),
+    address: formString(form, 'address', existing?.address),
+    contactNumber: formString(form, 'contactNumber', existing?.contactNumber),
+    email: formString(form, 'email', existing?.email),
+    emergencyContact: formString(form, 'emergencyContact', existing?.emergencyContact),
+    licenseNumber: formString(form, 'licenseNumber', existing?.licenseNumber),
+    licenseTypeRestrictions: formString(form, 'licenseTypeRestrictions', existing?.licenseTypeRestrictions),
+    licenseExpirationDate: formString(form, 'licenseExpirationDate', existing?.licenseExpirationDate),
+    status: formString(form, 'status', existing?.status ?? 'Active') as Driver['status'],
+    notes: formString(form, 'notes', existing?.notes),
+  }
+}
+
+function renterFromForm(form: FormData, existing?: Renter): Renter {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    fullName: formString(form, 'fullName', existing?.fullName),
+    address: formString(form, 'address', existing?.address),
+    contactNumber: formString(form, 'contactNumber', existing?.contactNumber),
+    email: formString(form, 'email', existing?.email),
+    validIdType: formString(form, 'validIdType', existing?.validIdType),
+    validIdNumber: formString(form, 'validIdNumber', existing?.validIdNumber),
+    driverLicenseNumber: formString(form, 'driverLicenseNumber', existing?.driverLicenseNumber),
+    emergencyContact: formString(form, 'emergencyContact', existing?.emergencyContact),
+    isWatchlisted: formString(form, 'isWatchlisted', existing?.isWatchlisted ? 'true' : 'false') === 'true',
+    notes: formString(form, 'notes', existing?.notes),
+  }
+}
+
+function bookingFromForm(form: FormData, existing?: Booking, referenceNumber?: string): Booking {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    referenceNumber: existing?.referenceNumber ?? referenceNumber ?? 'BK-2026-0001',
+    renterId: formString(form, 'renterId', existing?.renterId),
+    vehicleId: formString(form, 'vehicleId', existing?.vehicleId),
+    driverId: formString(form, 'driverId', existing?.driverId) || undefined,
+    bookingType: formString(form, 'bookingType', existing?.bookingType ?? 'Self-drive') as Booking['bookingType'],
+    startDateTime: formString(form, 'startDateTime', existing?.startDateTime),
+    endDateTime: formString(form, 'endDateTime', existing?.endDateTime),
+    pickupLocation: formString(form, 'pickupLocation', existing?.pickupLocation),
+    returnLocation: formString(form, 'returnLocation', existing?.returnLocation),
+    rateType: formString(form, 'rateType', existing?.rateType ?? 'Daily') as Booking['rateType'],
+    rateAmount: formNumber(form, 'rateAmount', existing?.rateAmount ?? 0),
+    securityDeposit: formNumber(form, 'securityDeposit', existing?.securityDeposit ?? 0),
+    paymentStatus: formString(form, 'paymentStatus', existing?.paymentStatus ?? 'Unpaid') as Booking['paymentStatus'],
+    bookingStatus: formString(form, 'bookingStatus', existing?.bookingStatus ?? 'Pending') as BookingStatus,
+    notes: formString(form, 'notes', existing?.notes),
+  }
+}
+
+function tripFromForm(form: FormData, existing: Trip): Trip {
+  return {
+    ...existing,
+    bookingReference: formString(form, 'bookingReference', existing.bookingReference),
+    vehicleId: formString(form, 'vehicleId', existing.vehicleId),
+    driverId: formString(form, 'driverId', existing.driverId) || undefined,
+    renterId: formString(form, 'renterId', existing.renterId),
+    tripType: formString(form, 'tripType', existing.tripType) as Trip['tripType'],
+    startDateTime: formString(form, 'startDateTime', existing.startDateTime),
+    endDateTime: formString(form, 'endDateTime', existing.endDateTime),
+    startingOdometer: formOptionalNumber(form, 'startingOdometer'),
+    endingOdometer: formOptionalNumber(form, 'endingOdometer'),
+    fuelExpense: formNumber(form, 'fuelExpense', existing.fuelExpense),
+    tollExpense: formNumber(form, 'tollExpense', existing.tollExpense),
+    parkingExpense: formNumber(form, 'parkingExpense', existing.parkingExpense),
+    otherExpenses: formNumber(form, 'otherExpenses', existing.otherExpenses),
+    grossRevenue: formNumber(form, 'grossRevenue', existing.grossRevenue),
+    driverProceedCommission: formNumber(form, 'driverProceedCommission', existing.driverProceedCommission),
+    paymentMethod: formString(form, 'paymentMethod', existing.paymentMethod),
+    paymentStatus: formString(form, 'paymentStatus', existing.paymentStatus) as Trip['paymentStatus'],
+    remarks: formString(form, 'remarks', existing.remarks),
+    status: formString(form, 'status', existing.status) as TripStatus,
+  }
+}
+
+function maintenanceFromForm(form: FormData, existing?: MaintenanceSchedule): MaintenanceSchedule {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    vehicleId: formString(form, 'vehicleId', existing?.vehicleId),
+    title: formString(form, 'title', existing?.title ?? 'PMS'),
+    dueDate: formString(form, 'dueDate', existing?.dueDate),
+    dueOdometer: formNumber(form, 'dueOdometer', existing?.dueOdometer ?? 0),
+    status: formString(form, 'status', existing?.status ?? 'Upcoming') as MaintenanceSchedule['status'],
+    vendorShop: formString(form, 'vendorShop', existing?.vendorShop),
+    estimatedCost: formNumber(form, 'estimatedCost', existing?.estimatedCost ?? 0),
+    notes: formString(form, 'notes', existing?.notes),
+  }
+}
+
+function documentFromForm(form: FormData, existing?: DocumentAttachment): DocumentAttachment {
+  return {
+    id: existing?.id ?? crypto.randomUUID(),
+    entityType: formString(form, 'entityType', existing?.entityType ?? 'Vehicle'),
+    entityId: formString(form, 'entityId', existing?.entityId),
+    originalFileName: formString(form, 'originalFileName', existing?.originalFileName ?? 'document.pdf'),
+    fileUrl: formString(form, 'fileUrl', existing?.fileUrl ?? '#'),
+    documentType: formString(form, 'documentType', existing?.documentType),
+    expirationDate: formString(form, 'expirationDate', existing?.expirationDate),
+    uploadedAt: existing?.uploadedAt ?? new Date().toISOString(),
+  }
+}
+
+function dateTimeInputValue(value?: string) {
+  return value ? value.slice(0, 16) : undefined
+}
+
+function documentEntityOptions(data: AppData) {
+  return [
+    ...data.vehicles.map((vehicle) => ({ id: vehicle.id, entityType: 'Vehicle', label: `Vehicle - ${vehicle.plateNumber}` })),
+    ...data.drivers.map((driver) => ({ id: driver.id, entityType: 'Driver', label: `Driver - ${driver.fullName}` })),
+    ...data.renters.map((renter) => ({ id: renter.id, entityType: 'Renter', label: `Renter - ${renter.fullName}` })),
+    ...data.bookings.map((booking) => ({ id: booking.id, entityType: 'Booking', label: `Booking - ${booking.referenceNumber}` })),
+    ...data.trips.map((trip) => ({ id: trip.id, entityType: 'Trip', label: `Trip - ${trip.tripNumber}` })),
+  ]
+}
+
+function initials(value?: string) {
+  const parts = (value || 'BeezFleet').trim().split(/\s+/).filter(Boolean)
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'BF'
 }
 
 export default App

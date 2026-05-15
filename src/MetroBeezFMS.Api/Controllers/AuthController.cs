@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using MetroBeezFMS.Application;
 using MetroBeezFMS.Domain;
 using MetroBeezFMS.Infrastructure.Identity;
@@ -70,9 +71,9 @@ public sealed class AuthController : ControllerBase
 
         await _emailService.SendAsync(
             user.Email!,
-            "MetroBeez FMS - Verify Your Email",
+            "BeezFleet - Verify Your Email",
             $"""
-            <p>Welcome to MetroBeez FMS, {user.FullName}.</p>
+            <p>Welcome to BeezFleet, {user.FullName}.</p>
             <p>Verify your email before we create your tenant database.</p>
             <p><a href="{verifyUrl}">Verify email</a></p>
             """,
@@ -141,19 +142,78 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
-    public async Task<ActionResult> ForgotPassword(ForgotPasswordRequest request)
+    public async Task<ActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         var user = await _userManager.FindByEmailAsync(request.Email.Trim());
         if (user is not null)
         {
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+            var frontendUrl = _configuration["FRONTEND_URL"] ?? _configuration["Frontend:Url"] ?? "http://localhost:5173";
+            var resetUrl = $"{frontendUrl.TrimEnd('/')}/reset-password?email={Uri.EscapeDataString(user.Email!)}&token={Uri.EscapeDataString(encodedToken)}";
+
             await _emailService.SendAsync(
                 user.Email!,
-                "MetroBeez FMS - Password Reset",
-                $"<p>Use this password reset token in the MetroBeez FMS reset flow:</p><p>{WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token))}</p>");
+                "BeezFleet - Password Reset",
+                $"""
+                <p>We received a request to reset your BeezFleet password.</p>
+                <p><a href="{resetUrl}">Reset password</a></p>
+                <p>If you did not request this, you can ignore this message.</p>
+                """,
+                cancellationToken);
         }
 
         return Accepted(new { message = "If an account exists, a password reset email has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ResetPassword(ResetPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+        {
+            return ValidationProblem("A new password with at least 8 characters is required.");
+        }
+
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is null)
+        {
+            return BadRequest("Invalid password reset request.");
+        }
+
+        var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(request.Token));
+        var result = await _userManager.ResetPasswordAsync(user, decodedToken, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            return ValidationProblem(string.Join("; ", result.Errors.Select(x => x.Description)));
+        }
+
+        return NoContent();
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<ActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+        {
+            return ValidationProblem("A new password with at least 8 characters is required.");
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = Guid.TryParse(userId, out var id) ? await _userManager.FindByIdAsync(id.ToString()) : null;
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            return ValidationProblem(string.Join("; ", result.Errors.Select(x => x.Description)));
+        }
+
+        return NoContent();
     }
 
     [HttpPost("logout")]

@@ -1,6 +1,6 @@
-# MetroBeez FMS
+# BeezFleet
 
-MetroBeez FMS is a SaaS fleet management web application for vehicle rental and fleet service operations.
+BeezFleet is a SaaS fleet management web application for vehicle rental and fleet service operations.
 
 ## Stack
 
@@ -51,7 +51,7 @@ FILE_STORAGE_PROVIDER
 ## Tenant Flow
 
 1. User registers in the central database.
-2. SendGrid sends `MetroBeez FMS - Verify Your Email`.
+2. SendGrid sends `BeezFleet - Verify Your Email`.
 3. Tenant database creation is blocked until email confirmation succeeds.
 4. Verification creates a tenant record and a safe database name like `metrobeez_fms_tenant_{tenantId}`.
 5. The backend connects with admin PostgreSQL environment variables, creates the tenant database, applies tenant migrations, and seeds demo data.
@@ -130,8 +130,8 @@ npm run build
 - EF Core migrations for central and tenant databases
 - Tenant database seed data
 - JWT authentication and role claims
-- SendGrid email service with MetroBeez FMS subject enforcement
+- SendGrid email service with BeezFleet subject enforcement
 - Local file storage via `IFileStorageService`
 - Reminder background service for PMS and document/license expiration
 - REST APIs for auth, dashboard, vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications, reports, and settings
-- Responsive SaaS dashboard UI with MetroBeez branding, forms, modals, tables, filters, badges, toasts, detail pages, and demo data
+- Responsive SaaS dashboard UI with BeezFleet branding, forms, modals, tables, filters, badges, toasts, detail pages, and demo data

@@ -19,9 +19,9 @@ public sealed class EmailService : IEmailService
 
     public async Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {
-        if (!subject.Contains("MetroBeez FMS", StringComparison.OrdinalIgnoreCase))
+        if (!subject.Contains("BeezFleet", StringComparison.OrdinalIgnoreCase))
         {
-            subject = $"MetroBeez FMS - {subject}";
+            subject = $"BeezFleet - {subject}";
         }
 
         var apiKey = _configuration["SENDGRID_API_KEY"];
@@ -34,7 +34,7 @@ public sealed class EmailService : IEmailService
 
         var client = new SendGridClient(apiKey);
         var message = MailHelper.CreateSingleEmail(
-            new EmailAddress(fromEmail, "MetroBeez FMS"),
+            new EmailAddress(fromEmail, "BeezFleet"),
             new EmailAddress(toEmail),
             subject,
             plainTextContent: StripHtml(htmlBody),

@@ -253,8 +253,12 @@ a {
   position: relative;
 }
 
-.notification-dot {
+.notification-dot,
+.notification-count {
   position: absolute;
+}
+
+.notification-dot {
   top: 8px;
   right: 8px;
   width: 9px;
@@ -262,6 +266,22 @@ a {
   border-radius: 999px;
   background: var(--red);
   border: 2px solid var(--white);
+}
+
+.notification-count {
+  top: -6px;
+  right: -6px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--red);
+  color: var(--white);
+  border: 2px solid var(--white);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .mobile-menu,
@@ -283,6 +303,15 @@ a {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+}
+
+.header-actions,
+.card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .page-header span {
@@ -767,6 +796,53 @@ tr:last-child td {
   padding: 18px;
 }
 
+.settings-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-avatar-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.avatar-preview {
+  display: inline-grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border-radius: var(--radius);
+  background: var(--blue);
+  color: var(--white);
+  font-weight: 900;
+  overflow: hidden;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.field span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-actions {
+  justify-content: flex-start;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -804,22 +880,27 @@ tr:last-child td {
 }
 
 .auth-shell {
+  position: relative;
   min-height: 100svh;
   display: grid;
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(120deg, rgba(6, 43, 92, 0.08), rgba(245, 180, 0, 0.14)),
+    linear-gradient(90deg, rgba(6, 20, 40, 0.58), rgba(6, 43, 92, 0.18)),
+    url("https://metrobeezfms-media-prod.s3.ap-southeast-1.amazonaws.com/prod-media/assets/login-background.jpeg") center / cover no-repeat,
     var(--soft);
 }
 
 .auth-panel {
+  position: relative;
+  z-index: 1;
   width: min(440px, 100%);
   padding: 28px;
   border-radius: var(--radius);
-  background: var(--white);
+  background: rgba(255, 255, 255, 0.94);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow);
+  box-shadow: 0 22px 60px rgba(6, 20, 40, 0.24);
+  backdrop-filter: blur(10px);
 }
 
 .auth-brand {
@@ -939,7 +1020,8 @@ tr:last-child td {
   .dashboard-grid,
   .two-column,
   .card-grid,
-  .calendar-strip {
+  .calendar-strip,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }

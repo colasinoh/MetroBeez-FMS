@@ -145,8 +145,8 @@ public static class TenantSeeder
             BookingType = BookingType.SelfDrive,
             StartDateTime = now.AddDays(9),
             EndDateTime = now.AddDays(11),
-            PickupLocation = "MetroBeez Garage",
-            ReturnLocation = "MetroBeez Garage",
+            PickupLocation = "BeezFleet Garage",
+            ReturnLocation = "BeezFleet Garage",
             RateType = RateType.Daily,
             RateAmount = 3600,
             SecurityDeposit = 8000,
@@ -224,7 +224,7 @@ public static class TenantSeeder
             DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(18)),
             DueOdometer = 36000,
             Status = MaintenanceStatus.DueSoon,
-            VendorShop = "MetroBeez Partner Garage",
+            VendorShop = "BeezFleet Partner Garage",
             EstimatedCost = 8500,
             Notes = "Oil, filters, brake inspection"
         };
@@ -250,7 +250,7 @@ public static class TenantSeeder
         {
             TenantId = tenantId,
             UserId = ownerUserId,
-            Title = "Welcome to MetroBeez FMS",
+            Title = "Welcome to BeezFleet",
             Message = "Your demo fleet workspace is ready.",
             Type = NotificationType.Info
         });

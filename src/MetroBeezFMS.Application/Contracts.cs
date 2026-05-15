@@ -6,6 +6,8 @@ public sealed record RegisterRequest(string FullName, string Email, string Passw
 public sealed record VerifyEmailRequest(string Email, string Token, string CompanyName);
 public sealed record LoginRequest(string Email, string Password);
 public sealed record ForgotPasswordRequest(string Email);
+public sealed record ResetPasswordRequest(string Email, string Token, string NewPassword);
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record AuthResponse(string Token, Guid UserId, Guid? TenantId, string Email, string FullName, string Role, string? TenantName, bool RequiresEmailVerification, bool RequiresOnboarding);
 public sealed record CompanyProfileRequest(string CompanyName, string? BusinessAddress, string? ContactNumber, string? BirDtiLguDocumentUrl, string? LogoUrl);
 

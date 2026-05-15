@@ -29,7 +29,7 @@ public sealed class ReminderBackgroundService : BackgroundService
     {
         if (!bool.TryParse(_configuration["Reminders:Enabled"], out var enabled) || !enabled)
         {
-            _logger.LogInformation("MetroBeez FMS reminder worker is registered but disabled. Set Reminders__Enabled=true to run it.");
+            _logger.LogInformation("BeezFleet reminder worker is registered but disabled. Set Reminders__Enabled=true to run it.");
             return;
         }
 
@@ -41,7 +41,7 @@ public sealed class ReminderBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed while processing MetroBeez FMS reminders.");
+                _logger.LogError(ex, "Failed while processing BeezFleet reminders.");
             }
 
             await Task.Delay(TimeSpan.FromHours(12), stoppingToken);
@@ -134,7 +134,7 @@ public sealed class ReminderBackgroundService : BackgroundService
                     });
                     if (!string.IsNullOrWhiteSpace(ownerEmail))
                     {
-                        await email.SendAsync(ownerEmail, "MetroBeez FMS - PMS Reminder", $"<p>{pms.Title} is due soon for {pms.Vehicle?.PlateNumber}.</p>", cancellationToken);
+                        await email.SendAsync(ownerEmail, "BeezFleet - PMS Reminder", $"<p>{pms.Title} is due soon for {pms.Vehicle?.PlateNumber}.</p>", cancellationToken);
                     }
                 }
             }
