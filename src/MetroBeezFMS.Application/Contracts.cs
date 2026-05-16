@@ -10,6 +10,30 @@ public sealed record ResetPasswordRequest(string Email, string Token, string New
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record AuthResponse(string Token, Guid UserId, Guid? TenantId, string Email, string FullName, string Role, string? TenantName, bool RequiresEmailVerification, bool RequiresOnboarding);
 public sealed record CompanyProfileRequest(string CompanyName, string? BusinessAddress, string? ContactNumber, string? BirDtiLguDocumentUrl, string? LogoUrl);
+public sealed record UserProfileDto(
+    Guid UserId,
+    string FullName,
+    string Email,
+    string? ProfilePhotoUrl,
+    string? GravatarUrl,
+    string? Address,
+    string? MobileNumber,
+    string? JobTitle,
+    string? EmergencyContact,
+    string? TimeZone,
+    string? DateFormat,
+    string? NotificationEmail);
+
+public sealed record UpdateUserProfileRequest(
+    string FullName,
+    string? ProfilePhotoUrl,
+    string? Address,
+    string? MobileNumber,
+    string? JobTitle,
+    string? EmergencyContact,
+    string? TimeZone,
+    string? DateFormat,
+    string? NotificationEmail);
 
 public sealed record DashboardSummaryDto(
     int TotalVehicles,

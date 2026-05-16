@@ -12,11 +12,16 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
     private static readonly Regex SafeNameRegex = new("^[a-z0-9_]+$", RegexOptions.Compiled);
     private readonly CentralDbContext _centralDbContext;
     private readonly IConfiguration _configuration;
+    private readonly IFileStorageService _fileStorageService;
 
-    public TenantDatabaseProvisioner(CentralDbContext centralDbContext, IConfiguration configuration)
+    public TenantDatabaseProvisioner(
+        CentralDbContext centralDbContext,
+        IConfiguration configuration,
+        IFileStorageService fileStorageService)
     {
         _centralDbContext = centralDbContext;
         _configuration = configuration;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<Tenant> ProvisionTenantForVerifiedUserAsync(Guid ownerUserId, string companyName, CancellationToken cancellationToken = default)
@@ -29,6 +34,7 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
 
         if (existingTenant is not null)
         {
+            await _fileStorageService.EnsureTenantRootAsync(existingTenant.Id.ToString("N"), cancellationToken);
             return existingTenant;
         }
 
@@ -60,6 +66,7 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
         await _centralDbContext.SaveChangesAsync(cancellationToken);
 
         await CreateDatabaseIfMissingAsync(databaseName, cancellationToken);
+        await _fileStorageService.EnsureTenantRootAsync(tenant.Id.ToString("N"), cancellationToken);
 
         var options = new DbContextOptionsBuilder<TenantDbContext>()
             .UseNpgsql(DatabaseConnectionFactory.BuildTenantConnectionString(_configuration, databaseName))

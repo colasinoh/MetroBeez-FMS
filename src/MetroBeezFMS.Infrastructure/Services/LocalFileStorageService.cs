@@ -35,4 +35,10 @@ public sealed class LocalFileStorageService : IFileStorageService
         var publicPath = $"{_publicBasePath}/{relativeFolder.Replace('\\', '/')}/{fileName}";
         return new StoredFile(fileName, originalFileName, publicPath, contentType, fileInfo.Length);
     }
+
+    public Task EnsureTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(Path.Combine(_storageRoot, tenantId));
+        return Task.CompletedTask;
+    }
 }

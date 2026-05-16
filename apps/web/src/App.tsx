@@ -35,7 +35,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import type * as React from 'react'
 import {
   Link,
@@ -105,11 +105,13 @@ type UserProfile = {
   fullName: string
   email: string
   profilePhotoUrl: string
+  gravatarUrl?: string
   address: string
   mobileNumber: string
   jobTitle: string
   emergencyContact: string
   timezone: string
+  timeZone?: string
   dateFormat: string
   notificationEmail: string
 }
@@ -209,6 +211,52 @@ async function postJson<TResponse>(path: string, body: unknown, token?: string) 
   return (text ? JSON.parse(text) : undefined) as TResponse
 }
 
+async function getJson<TResponse>(path: string, token?: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(readApiError(text, response.statusText))
+  }
+
+  return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
+async function putJson<TResponse>(path: string, body: unknown, token?: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(readApiError(text, response.statusText))
+  }
+
+  return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
+async function postForm<TResponse>(path: string, body: FormData, token?: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(readApiError(text, response.statusText))
+  }
+
+  return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
 function readApiError(text: string, fallback: string) {
   if (!text) return fallback
   try {
@@ -257,6 +305,7 @@ function App() {
     fullName: session?.fullName ?? '',
     email: session?.email ?? '',
     profilePhotoUrl: '',
+    gravatarUrl: '',
     address: '',
     mobileNumber: '',
     jobTitle: 'Owner / Admin',
@@ -281,6 +330,33 @@ function App() {
     setToast(nextToast)
     window.setTimeout(() => setToast(null), 3200)
   }
+  useEffect(() => {
+    if (!session?.token) {
+      return
+    }
+
+    let active = true
+    getJson<UserProfile>('/api/settings/me', session.token)
+      .then((profile) => {
+        if (active && profile) {
+          setUserProfile(normalizeUserProfile(profile, session))
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUserProfile((current) => ({
+            ...current,
+            fullName: current.fullName || session.fullName,
+            email: current.email || session.email,
+            notificationEmail: current.notificationEmail || session.email,
+          }))
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.userId])
   const handleAuthenticated = (auth: AuthResponse) => {
     const nextSession = storeSession(auth)
     setSession(nextSession)
@@ -288,6 +364,7 @@ function App() {
       ...current,
       fullName: auth.fullName,
       email: auth.email,
+      gravatarUrl: current.gravatarUrl,
       notificationEmail: current.notificationEmail || auth.email,
     }))
     if (auth.tenantName) {
@@ -331,6 +408,7 @@ function App() {
               authenticated={Boolean(session)}
               company={company}
               session={session}
+              userProfile={userProfile}
               notifications={notifications}
               onLogout={handleLogout}
             />
@@ -392,12 +470,14 @@ function Shell({
   authenticated,
   company,
   session,
+  userProfile,
   notifications,
   onLogout,
 }: {
   authenticated: boolean
   company: CompanyProfile
   session: AuthSession | null
+  userProfile: UserProfile
   notifications: NotificationItem[]
   onLogout: () => void
 }) {
@@ -446,7 +526,7 @@ function Shell({
             {unreadCount > 0 && <span className="notification-count">{unreadCount}</span>}
           </button>
           <button className="avatar-button" type="button" title="Account menu" onClick={() => navigate('/settings')}>
-            {initials(session?.fullName)}
+            <AvatarImage src={userProfile.profilePhotoUrl || userProfile.gravatarUrl} fallback={initials(userProfile.fullName || session?.fullName)} />
           </button>
           <button className="icon-button" type="button" title="Logout" onClick={onLogout}>
             <LogOut size={18} />
@@ -1503,8 +1583,15 @@ function SettingsPage({
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   showToast: (toast: Toast) => void
 }) {
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const [saving, setSaving] = useState(false)
+  const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!session?.token) {
+      showToast({ title: 'Settings not saved', detail: 'Please sign in again before updating your profile.' })
+      return
+    }
+
+    setSaving(true)
     const form = new FormData(event.currentTarget)
     const nextCompany = {
       name: String(form.get('name')),
@@ -1513,26 +1600,53 @@ function SettingsPage({
       birDtiLguDocumentUrl: String(form.get('birDtiLguDocumentUrl') || ''),
       logoUrl: String(form.get('logoUrl') || ''),
     }
-    const nextProfile = {
-      fullName: String(form.get('fullName')),
-      email: userProfile.email || session?.email || '',
-      profilePhotoUrl: String(form.get('profilePhotoUrl') || ''),
-      address: String(form.get('userAddress') || ''),
-      mobileNumber: String(form.get('mobileNumber') || ''),
-      jobTitle: String(form.get('jobTitle') || ''),
-      emergencyContact: String(form.get('emergencyContact') || ''),
-      timezone: String(form.get('timezone') || 'Asia/Manila'),
-      dateFormat: String(form.get('dateFormat') || 'MMM d, yyyy'),
-      notificationEmail: String(form.get('notificationEmail') || userProfile.email || ''),
-    }
-    setCompany(nextCompany)
-    setUserProfile(nextProfile)
-    if (session) {
-      const nextSession = { ...session, fullName: nextProfile.fullName }
+
+    try {
+      let uploadedPhotoUrl = String(form.get('profilePhotoUrl') || userProfile.profilePhotoUrl || '')
+      const profilePhotoFile = form.get('profilePhotoFile')
+      if (profilePhotoFile instanceof File && profilePhotoFile.size > 0) {
+        const uploadForm = new FormData()
+        uploadForm.append('file', profilePhotoFile)
+        const uploadedProfile = await postForm<UserProfile>('/api/settings/profile-photo', uploadForm, session.token)
+        uploadedPhotoUrl = uploadedProfile.profilePhotoUrl || uploadedPhotoUrl
+      }
+
+      const savedProfile = await putJson<UserProfile>('/api/settings/me', {
+        fullName: String(form.get('fullName')),
+        profilePhotoUrl: uploadedPhotoUrl || null,
+        address: String(form.get('userAddress') || ''),
+        mobileNumber: String(form.get('mobileNumber') || ''),
+        jobTitle: String(form.get('jobTitle') || ''),
+        emergencyContact: String(form.get('emergencyContact') || ''),
+        timeZone: String(form.get('timezone') || 'Asia/Manila'),
+        dateFormat: String(form.get('dateFormat') || 'MMM d, yyyy'),
+        notificationEmail: String(form.get('notificationEmail') || userProfile.email || session.email),
+      }, session.token)
+
+      await postJson('/api/auth/onboarding', {
+        companyName: nextCompany.name,
+        businessAddress: nextCompany.address || null,
+        contactNumber: nextCompany.contactNumber || null,
+        birDtiLguDocumentUrl: nextCompany.birDtiLguDocumentUrl || null,
+        logoUrl: nextCompany.logoUrl || null,
+      }, session.token)
+
+      const normalizedProfile = normalizeUserProfile(savedProfile, session)
+      setCompany(nextCompany)
+      setUserProfile(normalizedProfile)
+      const nextSession = {
+        ...session,
+        fullName: normalizedProfile.fullName,
+        tenantName: nextCompany.name,
+      }
       setSession(nextSession)
       window.localStorage.setItem(authStorageKey, JSON.stringify(nextSession))
+      showToast({ title: 'Settings saved', detail: 'User and company details were updated.' })
+    } catch (error) {
+      showToast({ title: 'Settings not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSaving(false)
     }
-    showToast({ title: 'Settings saved', detail: 'User and company details were updated.' })
   }
   const changePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1561,10 +1675,12 @@ function SettingsPage({
   return (
     <Page>
       <PageHeader eyebrow="Workspace" title="Settings" />
-      <form className="settings-grid" onSubmit={save}>
+      <form className="settings-grid" onSubmit={save} key={`${userProfile.email}-${userProfile.profilePhotoUrl}-${company.name}`}>
         <Panel title="Super user profile">
           <div className="settings-avatar-row">
-            <span className="avatar-preview">{userProfile.profilePhotoUrl ? <img src={userProfile.profilePhotoUrl} alt="" /> : initials(userProfile.fullName || session?.fullName)}</span>
+            <span className="avatar-preview">
+              <AvatarImage src={userProfile.profilePhotoUrl || userProfile.gravatarUrl} fallback={initials(userProfile.fullName || session?.fullName)} />
+            </span>
             <label className="field">
               <span><Camera size={14} /> Profile photo</span>
               <input name="profilePhotoFile" type="file" accept="image/*" />
@@ -1592,7 +1708,7 @@ function SettingsPage({
             <Field label="BIR / DTI / LGU document URL" name="birDtiLguDocumentUrl" defaultValue={company.birDtiLguDocumentUrl} />
           </div>
         </Panel>
-        <div className="form-actions settings-actions"><button className="primary-button" type="submit"><Save size={18} /> Save settings</button></div>
+        <div className="form-actions settings-actions"><button className="primary-button" type="submit" disabled={saving}><Save size={18} /> {saving ? 'Saving...' : 'Save settings'}</button></div>
       </form>
       <form className="form-panel" onSubmit={changePassword}>
         <h2>Change password</h2>
@@ -2454,6 +2570,37 @@ function documentEntityOptions(data: AppData) {
 function initials(value?: string) {
   const parts = (value || 'BeezFleet').trim().split(/\s+/).filter(Boolean)
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'BF'
+}
+
+function normalizeUserProfile(profile: Partial<UserProfile>, session?: AuthSession | null): UserProfile {
+  return {
+    fullName: profile.fullName || session?.fullName || '',
+    email: profile.email || session?.email || '',
+    profilePhotoUrl: profile.profilePhotoUrl || '',
+    gravatarUrl: profile.gravatarUrl || '',
+    address: profile.address || '',
+    mobileNumber: profile.mobileNumber || '',
+    jobTitle: profile.jobTitle || 'Owner / Admin',
+    emergencyContact: profile.emergencyContact || '',
+    timezone: profile.timezone || profile.timeZone || 'Asia/Manila',
+    timeZone: profile.timeZone || profile.timezone || 'Asia/Manila',
+    dateFormat: profile.dateFormat || 'MMM d, yyyy',
+    notificationEmail: profile.notificationEmail || profile.email || session?.email || '',
+  }
+}
+
+function AvatarImage({ src, fallback }: { src?: string; fallback: string }) {
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
+  if (!src || failed) {
+    return <>{fallback}</>
+  }
+
+  return <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
 }
 
 export default App

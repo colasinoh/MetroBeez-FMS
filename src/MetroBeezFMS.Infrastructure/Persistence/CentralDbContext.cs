@@ -23,6 +23,13 @@ public sealed class CentralDbContext : IdentityDbContext<AppUser, IdentityRole<G
         {
             entity.ToTable("Users");
             entity.Property(x => x.FullName).HasMaxLength(180);
+            entity.Property(x => x.ProfilePhotoUrl).HasMaxLength(1000);
+            entity.Property(x => x.Address).HasMaxLength(500);
+            entity.Property(x => x.JobTitle).HasMaxLength(120);
+            entity.Property(x => x.EmergencyContact).HasMaxLength(220);
+            entity.Property(x => x.TimeZone).HasMaxLength(80);
+            entity.Property(x => x.DateFormat).HasMaxLength(40);
+            entity.Property(x => x.NotificationEmail).HasMaxLength(256);
         });
 
         builder.Entity<IdentityRole<Guid>>().ToTable("Roles");

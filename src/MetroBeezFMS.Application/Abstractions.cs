@@ -11,6 +11,7 @@ public interface IEmailService
 public interface IFileStorageService
 {
     Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantId, CancellationToken cancellationToken = default);
+    Task EnsureTenantRootAsync(string tenantId, CancellationToken cancellationToken = default);
 }
 
 public interface ITenantDatabaseProvisioner
