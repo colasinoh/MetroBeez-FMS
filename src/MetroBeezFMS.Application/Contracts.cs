@@ -9,6 +9,21 @@ public sealed record ForgotPasswordRequest(string Email);
 public sealed record ResetPasswordRequest(string Email, string Token, string NewPassword);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record AuthResponse(string Token, Guid UserId, Guid? TenantId, string Email, string FullName, string Role, string? TenantName, bool RequiresEmailVerification, bool RequiresOnboarding);
+public sealed record AdminTenantDto(
+    Guid Id,
+    string Name,
+    string Slug,
+    string DatabaseName,
+    TenantStatus Status,
+    string SubscriptionStatus,
+    Guid OwnerUserId,
+    string? OwnerEmail,
+    string? OwnerName,
+    int UserCount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt);
+
+public sealed record UpdateTenantStatusRequest(TenantStatus Status);
 public sealed record CompanyProfileRequest(string CompanyName, string? BusinessAddress, string? ContactNumber, string? BirDtiLguDocumentUrl, string? LogoUrl);
 public sealed record UserProfileDto(
     Guid UserId,

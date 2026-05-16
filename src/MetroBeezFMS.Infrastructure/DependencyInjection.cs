@@ -49,6 +49,7 @@ public static class DependencyInjection
                 : ActivatorUtilities.CreateInstance<LocalFileStorageService>(sp);
         });
         services.AddScoped<ITenantDatabaseProvisioner, TenantDatabaseProvisioner>();
+        services.AddScoped<ITenantAdministrationService, TenantAdministrationService>();
         services.AddScoped<TenantDbContextFactory>();
         services.AddScoped<ITenantDbContextFactory>(sp => sp.GetRequiredService<TenantDbContextFactory>());
         services.AddHostedService<ReminderBackgroundService>();

@@ -76,6 +76,34 @@ public sealed class S3FileStorageService : IFileStorageService
         await _s3Client.PutObjectAsync(request, cancellationToken);
     }
 
+    public async Task DeleteTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        var prefix = TenantRootKey(tenantId);
+        string? continuationToken = null;
+
+        do
+        {
+            var listResponse = await _s3Client.ListObjectsV2Async(new ListObjectsV2Request
+            {
+                BucketName = _bucketName,
+                Prefix = prefix,
+                ContinuationToken = continuationToken
+            }, cancellationToken);
+
+            if (listResponse.S3Objects.Count > 0)
+            {
+                await _s3Client.DeleteObjectsAsync(new DeleteObjectsRequest
+                {
+                    BucketName = _bucketName,
+                    Objects = listResponse.S3Objects.Select(item => new KeyVersion { Key = item.Key }).ToList()
+                }, cancellationToken);
+            }
+
+            continuationToken = listResponse.IsTruncated == true ? listResponse.NextContinuationToken : null;
+        }
+        while (!string.IsNullOrWhiteSpace(continuationToken));
+    }
+
     private static string? FirstNonEmpty(params string?[] values)
     {
         return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));

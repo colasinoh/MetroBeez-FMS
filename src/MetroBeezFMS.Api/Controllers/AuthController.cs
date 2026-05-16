@@ -126,6 +126,11 @@ public sealed class AuthController : ControllerBase
             return Ok(new AuthResponse("", user.Id, null, user.Email!, user.FullName, "", null, true, false));
         }
 
+        if (await _userManager.IsInRoleAsync(user, Roles.SuperAdmin))
+        {
+            return BuildPlatformAuthResponse(user);
+        }
+
         var tenantUser = await _centralDbContext.TenantUsers
             .Include(x => x.Tenant)
             .Where(x => x.UserId == user.Id && x.IsActive)
@@ -135,6 +140,11 @@ public sealed class AuthController : ControllerBase
         if (tenantUser?.Tenant is null)
         {
             return Ok(new AuthResponse("", user.Id, null, user.Email!, user.FullName, "", null, false, true));
+        }
+
+        if (tenantUser.Tenant.Status != TenantStatus.Active)
+        {
+            return Unauthorized("This tenant is not active.");
         }
 
         return BuildAuthResponse(user, tenantUser.Tenant, tenantUser, requiresEmailVerification: false, requiresOnboarding: false);
@@ -270,5 +280,23 @@ public sealed class AuthController : ControllerBase
             tenant.Name,
             requiresEmailVerification,
             requiresOnboarding));
+    }
+
+    private ActionResult<AuthResponse> BuildPlatformAuthResponse(AppUser user)
+    {
+        var token = _tokenService.CreatePlatformToken(
+            new TokenUser(user.Id, user.Email!, user.FullName),
+            Roles.SuperAdmin);
+
+        return Ok(new AuthResponse(
+            token,
+            user.Id,
+            null,
+            user.Email!,
+            user.FullName,
+            Roles.SuperAdmin,
+            null,
+            RequiresEmailVerification: false,
+            RequiresOnboarding: false));
     }
 }

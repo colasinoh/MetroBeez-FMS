@@ -79,7 +79,7 @@ const money = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 0,
 })
 
-const navItems = [
+const tenantNavItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/vehicles', label: 'Vehicles', icon: Car },
   { to: '/drivers', label: 'Drivers', icon: UserRound },
@@ -91,6 +91,10 @@ const navItems = [
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
+]
+
+const platformNavItems = [
+  { to: '/admin/tenants', label: 'Tenants', icon: ShieldCheck },
 ]
 
 type CompanyProfile = {
@@ -143,6 +147,23 @@ type AuthSession = {
   tenantName: string | null
 }
 
+type TenantStatus = 'PendingVerification' | 'Provisioning' | 'Active' | 'Suspended' | 'Cancelled'
+
+type AdminTenant = {
+  id: string
+  name: string
+  slug: string
+  databaseName: string
+  status: TenantStatus
+  subscriptionStatus: string
+  ownerUserId: string
+  ownerEmail?: string
+  ownerName?: string
+  userCount: number
+  createdAt: string
+  updatedAt?: string
+}
+
 type AppData = {
   vehicles: Vehicle[]
   drivers: Driver[]
@@ -193,6 +214,11 @@ function storeSession(auth: AuthResponse) {
   return session
 }
 
+function landingPathAfterAuth(auth: AuthResponse | AuthSession) {
+  if (auth.role === 'SuperAdmin') return '/admin/tenants'
+  return 'requiresOnboarding' in auth && auth.requiresOnboarding ? '/onboarding' : '/dashboard'
+}
+
 async function postJson<TResponse>(path: string, body: unknown, token?: string) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
@@ -240,6 +266,18 @@ async function putJson<TResponse>(path: string, body: unknown, token?: string) {
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
+async function deleteJson(path: string, token?: string) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(readApiError(text, response.statusText))
+  }
 }
 
 async function postForm<TResponse>(path: string, body: FormData, token?: string) {
@@ -435,8 +473,9 @@ function App() {
             />
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage data={data} />} />
+          <Route index element={<Navigate to={session?.role === 'SuperAdmin' ? '/admin/tenants' : '/dashboard'} replace />} />
+          <Route path="/admin/tenants" element={<PlatformTenantsPage session={session} showToast={showToast} />} />
+          <Route path="/dashboard" element={session?.role === 'SuperAdmin' ? <Navigate to="/admin/tenants" replace /> : <DashboardPage data={data} />} />
           <Route
             path="/vehicles"
             element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} documents={documents} trips={trips} />}
@@ -506,7 +545,9 @@ function Shell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
-  const unreadCount = notifications.filter((item) => !item.isRead).length
+  const isSuperAdmin = session?.role === 'SuperAdmin'
+  const navItems = isSuperAdmin ? platformNavItems : tenantNavItems
+  const unreadCount = isSuperAdmin ? 0 : notifications.filter((item) => !item.isRead).length
 
   if (!authenticated) {
     return <Navigate to="/login" replace />
@@ -515,11 +556,11 @@ function Shell({
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'is-open' : ''}`}>
-        <Link className="brand" to="/dashboard" onClick={() => setMenuOpen(false)}>
+        <Link className="brand" to={isSuperAdmin ? '/admin/tenants' : '/dashboard'} onClick={() => setMenuOpen(false)}>
           <span className="brand-mark">BF</span>
           <span>
             <strong>BeezFleet</strong>
-            <small>Fleet command center</small>
+            <small>{isSuperAdmin ? 'Platform command center' : 'Fleet command center'}</small>
           </span>
         </Link>
         <nav className="nav-list" aria-label="Primary navigation">
@@ -538,17 +579,17 @@ function Shell({
           </button>
           <div className="topbar-company">
             <Building2 size={18} />
-            <span>{company.name}</span>
+            <span>{isSuperAdmin ? 'BeezFleet Platform' : company.name}</span>
           </div>
           <label className="global-search">
             <Search size={17} />
-            <input placeholder="Search fleet records" />
+            <input placeholder={isSuperAdmin ? 'Search tenants' : 'Search fleet records'} />
           </label>
           <button className="icon-button notification-button" type="button" title="Notifications" onClick={() => navigate('/notifications')}>
             <Bell size={19} />
             {unreadCount > 0 && <span className="notification-count">{unreadCount}</span>}
           </button>
-          <button className="avatar-button" type="button" title="Account menu" onClick={() => navigate('/settings')}>
+          <button className="avatar-button" type="button" title="Account menu" onClick={() => navigate(isSuperAdmin ? '/admin/tenants' : '/settings')}>
             <AvatarImage sources={avatarSources(userProfile, clientGravatarUrl)} fallback={initials(userProfile.fullName || session?.fullName)} />
           </button>
           <button className="icon-button" type="button" title="Logout" onClick={onLogout}>
@@ -644,6 +685,138 @@ function DashboardPage({ data }: { data: AppData }) {
           </CompactList>
         </Panel>
       </section>
+    </Page>
+  )
+}
+
+const tenantStatusOptions: TenantStatus[] = ['PendingVerification', 'Provisioning', 'Active', 'Suspended', 'Cancelled']
+
+function PlatformTenantsPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
+  const [tenants, setTenants] = useState<AdminTenant[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<AdminTenant | null>(null)
+
+  useEffect(() => {
+    if (!session?.token || session.role !== 'SuperAdmin') {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<AdminTenant[]>('/api/admin/tenants', session.token)
+      .then((items) => {
+        if (active) {
+          setTenants(items)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Tenants not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.role])
+
+  if (!session || session.role !== 'SuperAdmin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const filteredTenants = tenants.filter((tenant) =>
+    [tenant.name, tenant.slug, tenant.ownerEmail, tenant.databaseName, tenant.status]
+      .join(' ')
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  )
+
+  const updateTenantStatus = async (tenant: AdminTenant, status: TenantStatus) => {
+    const previous = tenant.status
+    setTenants((current) => current.map((item) => item.id === tenant.id ? { ...item, status } : item))
+    try {
+      const updated = await putJson<AdminTenant>(`/api/admin/tenants/${tenant.id}/status`, { status }, session.token)
+      setTenants((current) => current.map((item) => item.id === tenant.id ? updated : item))
+      showToast({ title: 'Tenant updated', detail: `${tenant.name} is now ${statusLabel(status)}.` })
+    } catch (error) {
+      setTenants((current) => current.map((item) => item.id === tenant.id ? { ...item, status: previous } : item))
+      showToast({ title: 'Tenant not updated', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const deleteTenant = async () => {
+    if (!deleteTarget) return
+    try {
+      await deleteJson(`/api/admin/tenants/${deleteTarget.id}`, session.token)
+      setTenants((current) => current.filter((tenant) => tenant.id !== deleteTarget.id))
+      showToast({ title: 'Tenant deleted', detail: `${deleteTarget.name} database and storage folder were removed.` })
+      setDeleteTarget(null)
+    } catch (error) {
+      showToast({ title: 'Tenant not deleted', detail: error instanceof Error ? error.message : 'Please check the API logs.' })
+    }
+  }
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Platform" title="Tenants" />
+      <Toolbar query={query} setQuery={setQuery} placeholder="Search tenant, owner, database, status" />
+      <Panel title="Tenant workspaces">
+        <Table>
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Owner</th>
+              <th>Database</th>
+              <th>Users</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTenants.map((tenant) => (
+              <tr key={tenant.id}>
+                <td>
+                  <strong>{tenant.name}</strong>
+                  <small>{tenant.slug} - {tenant.subscriptionStatus}</small>
+                </td>
+                <td>
+                  {tenant.ownerName || 'No owner name'}
+                  <small>{tenant.ownerEmail || tenant.ownerUserId}</small>
+                </td>
+                <td><code>{tenant.databaseName}</code></td>
+                <td>{tenant.userCount}</td>
+                <td>
+                  <label className="compact-select">
+                    <select value={tenant.status} onChange={(event) => updateTenantStatus(tenant, event.target.value as TenantStatus)}>
+                      {tenantStatusOptions.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+                    </select>
+                  </label>
+                </td>
+                <td>{dateText(tenant.createdAt)}</td>
+                <td className="table-actions">
+                  <button className="icon-button danger" type="button" title="Delete tenant" onClick={() => setDeleteTarget(tenant)}><Trash2 size={16} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        {loading && <EmptyState title="Loading tenants" detail="Fetching platform workspaces." />}
+        {!loading && filteredTenants.length === 0 && <EmptyState title="No tenants found" detail="Adjust the search or create a tenant from the registration flow." />}
+      </Panel>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete tenant"
+        detail={`This permanently deletes ${deleteTarget?.name ?? 'this tenant'}, its tenant database, and its storage folder. This cannot be undone.`}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={deleteTenant}
+      />
     </Page>
   )
 }
@@ -1773,7 +1946,7 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
 
       onAuthenticated(auth)
       showToast({ title: 'Welcome back', detail: 'You are signed in to BeezFleet.' })
-      navigate(auth.requiresOnboarding ? '/onboarding' : '/dashboard')
+      navigate(landingPathAfterAuth(auth))
     } catch (error) {
       showToast({ title: 'Login failed', detail: error instanceof Error ? error.message : 'Please check your credentials.' })
     } finally {
@@ -1922,7 +2095,7 @@ function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (aut
       })
       onAuthenticated(auth)
       showToast({ title: 'Email verified', detail: 'Your tenant workspace has been created.' })
-      navigate(auth.requiresOnboarding ? '/onboarding' : '/dashboard')
+      navigate(landingPathAfterAuth(auth))
     } catch (error) {
       showToast({ title: 'Verification failed', detail: error instanceof Error ? error.message : 'Please check the email link.' })
     } finally {
@@ -2423,6 +2596,10 @@ function entityLabel(data: AppData, entityType: string, entityId: string) {
 function dateText(value?: string) {
   if (!value) return 'N/A'
   return new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function statusLabel(status: string) {
+  return status.replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
 function daysUntil(value?: string) {

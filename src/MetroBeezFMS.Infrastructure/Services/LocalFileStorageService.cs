@@ -41,4 +41,21 @@ public sealed class LocalFileStorageService : IFileStorageService
         Directory.CreateDirectory(Path.Combine(_storageRoot, tenantId));
         return Task.CompletedTask;
     }
+
+    public Task DeleteTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        var tenantPath = Path.GetFullPath(Path.Combine(_storageRoot, tenantId));
+        var storageRoot = Path.GetFullPath(_storageRoot);
+        if (!tenantPath.StartsWith(storageRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Tenant storage path is outside the configured storage root.");
+        }
+
+        if (Directory.Exists(tenantPath))
+        {
+            Directory.Delete(tenantPath, recursive: true);
+        }
+
+        return Task.CompletedTask;
+    }
 }

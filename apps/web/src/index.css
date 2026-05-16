@@ -482,6 +482,12 @@ td small {
   display: block;
 }
 
+td code {
+  color: var(--blue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
 .unread-pill {
   border-radius: 999px;
   background: var(--gold-2);
@@ -510,6 +516,15 @@ td small {
 
 .select-filter select {
   min-width: 140px;
+}
+
+.compact-select select {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--ink);
+  padding: 0 10px;
 }
 
 .table-wrap {

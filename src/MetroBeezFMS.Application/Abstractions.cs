@@ -12,11 +12,19 @@ public interface IFileStorageService
 {
     Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantId, CancellationToken cancellationToken = default);
     Task EnsureTenantRootAsync(string tenantId, CancellationToken cancellationToken = default);
+    Task DeleteTenantRootAsync(string tenantId, CancellationToken cancellationToken = default);
 }
 
 public interface ITenantDatabaseProvisioner
 {
     Task<Tenant> ProvisionTenantForVerifiedUserAsync(Guid ownerUserId, string companyName, CancellationToken cancellationToken = default);
+}
+
+public interface ITenantAdministrationService
+{
+    Task<IReadOnlyList<AdminTenantDto>> ListTenantsAsync(CancellationToken cancellationToken = default);
+    Task<AdminTenantDto> UpdateStatusAsync(Guid tenantId, TenantStatus status, CancellationToken cancellationToken = default);
+    Task DeleteTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }
 
 public interface ITenantDbContextFactory
@@ -35,6 +43,7 @@ public interface ICurrentTenantService
 public interface ITokenService
 {
     string CreateToken(TokenUser user, TenantUser tenantUser, string tenantName);
+    string CreatePlatformToken(TokenUser user, string role);
 }
 
 public sealed record StoredFile(

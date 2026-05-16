@@ -18,8 +18,11 @@ public abstract class SoftDeletableEntity : AuditableEntity
 
 public static class Roles
 {
+    public const string SuperAdmin = "SuperAdmin";
     public const string OwnerAdmin = "Owner/Admin";
     public const string Manager = "Manager";
     public const string Driver = "Driver";
     public const string Viewer = "Viewer";
+
+    public static readonly string[] All = [SuperAdmin, OwnerAdmin, Manager, Driver, Viewer];
 }

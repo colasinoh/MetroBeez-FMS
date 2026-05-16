@@ -1,6 +1,7 @@
 using System.Text;
 using MetroBeezFMS.Api.Middleware;
 using MetroBeezFMS.Infrastructure;
+using MetroBeezFMS.Infrastructure.Identity;
 using MetroBeezFMS.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -52,6 +53,8 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+await app.Services.SeedPlatformIdentityAsync();
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -64,6 +67,7 @@ app.UseStaticFiles();
 app.UseCors("MetroBeezWeb");
 
 app.UseAuthentication();
+app.UseMiddleware<TenantStatusMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
