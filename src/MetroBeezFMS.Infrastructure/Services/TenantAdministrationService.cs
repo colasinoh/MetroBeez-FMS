@@ -69,9 +69,38 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
         EnsureSafeDatabaseName(databaseName);
         EnsureDroppableDatabaseName(databaseName);
 
-        await _fileStorageService.DeleteTenantRootAsync(tenant.Id.ToString("N"), cancellationToken);
-        await DropTenantDatabaseIfExistsAsync(databaseName, cancellationToken);
-        await DeleteCentralTenantRowsAsync(tenant, cancellationToken);
+        try
+        {
+            await _fileStorageService.DeleteTenantRootAsync(tenant.Id.ToString("N"), cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Tenant storage cleanup failed. Confirm the app credentials can list and delete objects under the tenant folder. Details: {exception.Message}",
+                exception);
+        }
+
+        try
+        {
+            await DropTenantDatabaseIfExistsAsync(databaseName, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Tenant database drop failed. Confirm DB_ADMIN_USERNAME can terminate connections and drop the tenant database. Details: {exception.Message}",
+                exception);
+        }
+
+        try
+        {
+            await DeleteCentralTenantRowsAsync(tenant, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Tenant central records cleanup failed. The tenant database may already be deleted. Details: {exception.Message}",
+                exception);
+        }
     }
 
     private async Task DeleteCentralTenantRowsAsync(Tenant tenant, CancellationToken cancellationToken)
