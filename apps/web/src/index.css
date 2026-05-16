@@ -238,7 +238,18 @@ a {
 .secondary-button,
 .danger-button {
   padding: 0 14px;
-  font-weight: 500;
+  font-weight: 400;
+}
+
+.compact-button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.muted-action {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .primary-button {
@@ -947,7 +958,7 @@ tr:last-child td {
 }
 
 .auth-form .primary-button {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .toast {

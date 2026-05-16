@@ -11,7 +11,7 @@ import type {
 
 export const vehiclesSeed: Vehicle[] = [
   {
-    id: 'vehicle-1',
+    id: '11111111-1111-4111-8111-111111111111',
     plateNumber: 'MBZ-1024',
     mvFileNumber: '1301-000241',
     engineNumber: '2GD-884201',
@@ -33,7 +33,7 @@ export const vehiclesSeed: Vehicle[] = [
     remarks: 'Primary airport rental unit',
   },
   {
-    id: 'vehicle-2',
+    id: '22222222-2222-4222-8222-222222222222',
     plateNumber: 'MBZ-2048',
     mvFileNumber: '1301-000512',
     engineNumber: '4N14-662018',
@@ -58,7 +58,7 @@ export const vehiclesSeed: Vehicle[] = [
 
 export const driversSeed: Driver[] = [
   {
-    id: 'driver-1',
+    id: '33333333-3333-4333-8333-333333333333',
     fullName: 'Miguel Santos',
     address: 'Pasay City, Metro Manila',
     contactNumber: '+63 917 555 0142',
@@ -71,7 +71,7 @@ export const driversSeed: Driver[] = [
     notes: 'Preferred for airport and executive bookings',
   },
   {
-    id: 'driver-2',
+    id: '44444444-4444-4444-8444-444444444444',
     fullName: 'Carlo Reyes',
     address: 'Quezon City, Metro Manila',
     contactNumber: '+63 918 555 0199',
@@ -87,7 +87,7 @@ export const driversSeed: Driver[] = [
 
 export const rentersSeed: Renter[] = [
   {
-    id: 'renter-1',
+    id: '55555555-5555-4555-8555-555555555555',
     fullName: 'Alyssa Cruz',
     address: 'BGC, Taguig',
     contactNumber: '+63 919 555 0101',
@@ -99,7 +99,7 @@ export const rentersSeed: Renter[] = [
     notes: 'Frequent airport pickup customer',
   },
   {
-    id: 'renter-2',
+    id: '66666666-6666-4666-8666-666666666666',
     fullName: 'Northstar Trading Corp.',
     address: 'Makati City',
     contactNumber: '+63 2 8555 0188',
@@ -111,7 +111,7 @@ export const rentersSeed: Renter[] = [
     notes: 'Corporate logistics account',
   },
   {
-    id: 'renter-3',
+    id: '77777777-7777-4777-8777-777777777777',
     fullName: 'Jose Villanueva',
     address: 'Paranaque City',
     contactNumber: '+63 920 555 0133',
@@ -127,11 +127,11 @@ export const rentersSeed: Renter[] = [
 
 export const bookingsSeed: Booking[] = [
   {
-    id: 'booking-1',
+    id: '88888888-8888-4888-8888-888888888888',
     referenceNumber: 'BK-2026-0001',
-    renterId: 'renter-1',
-    vehicleId: 'vehicle-1',
-    driverId: 'driver-1',
+    renterId: '55555555-5555-4555-8555-555555555555',
+    vehicleId: '11111111-1111-4111-8111-111111111111',
+    driverId: '33333333-3333-4333-8333-333333333333',
     bookingType: 'With driver',
     startDateTime: '2026-05-16T08:00',
     endDateTime: '2026-05-18T18:00',
@@ -145,11 +145,11 @@ export const bookingsSeed: Booking[] = [
     notes: 'Airport pickup, child seat requested',
   },
   {
-    id: 'booking-2',
+    id: '99999999-9999-4999-8999-999999999999',
     referenceNumber: 'BK-2026-0002',
-    renterId: 'renter-2',
-    vehicleId: 'vehicle-2',
-    driverId: 'driver-2',
+    renterId: '66666666-6666-4666-8666-666666666666',
+    vehicleId: '22222222-2222-4222-8222-222222222222',
+    driverId: '44444444-4444-4444-8444-444444444444',
     bookingType: 'Delivery/logistics',
     startDateTime: '2026-05-14T07:00',
     endDateTime: '2026-05-17T19:00',
@@ -163,10 +163,10 @@ export const bookingsSeed: Booking[] = [
     notes: 'Three-day fulfillment route',
   },
   {
-    id: 'booking-3',
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     referenceNumber: 'BK-2026-0003',
-    renterId: 'renter-3',
-    vehicleId: 'vehicle-1',
+    renterId: '77777777-7777-4777-8777-777777777777',
+    vehicleId: '11111111-1111-4111-8111-111111111111',
     bookingType: 'Self-drive',
     startDateTime: '2026-05-24T09:00',
     endDateTime: '2026-05-26T17:00',
@@ -183,12 +183,12 @@ export const bookingsSeed: Booking[] = [
 
 export const tripsSeed: Trip[] = [
   {
-    id: 'trip-1',
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     tripNumber: 'TR-2026-0001',
     bookingReference: 'BK-2026-0002',
-    vehicleId: 'vehicle-2',
-    driverId: 'driver-2',
-    renterId: 'renter-2',
+    vehicleId: '22222222-2222-4222-8222-222222222222',
+    driverId: '44444444-4444-4444-8444-444444444444',
+    renterId: '66666666-6666-4666-8666-666666666666',
     tripType: 'Delivery',
     startDateTime: '2026-05-14T07:00',
     startingOdometer: 60980,
@@ -205,11 +205,11 @@ export const tripsSeed: Trip[] = [
     status: 'Active',
   },
   {
-    id: 'trip-2',
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     tripNumber: 'TR-2026-0002',
-    vehicleId: 'vehicle-1',
-    driverId: 'driver-1',
-    renterId: 'renter-1',
+    vehicleId: '11111111-1111-4111-8111-111111111111',
+    driverId: '33333333-3333-4333-8333-333333333333',
+    renterId: '55555555-5555-4555-8555-555555555555',
     tripType: 'Private booking',
     startDateTime: '2026-05-02T08:00',
     endDateTime: '2026-05-03T20:00',
@@ -227,12 +227,12 @@ export const tripsSeed: Trip[] = [
     status: 'Completed',
   },
   {
-    id: 'trip-3',
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
     tripNumber: 'TR-2026-0003',
     bookingReference: 'BK-2026-0001',
-    vehicleId: 'vehicle-1',
-    driverId: 'driver-1',
-    renterId: 'renter-1',
+    vehicleId: '11111111-1111-4111-8111-111111111111',
+    driverId: '33333333-3333-4333-8333-333333333333',
+    renterId: '55555555-5555-4555-8555-555555555555',
     tripType: 'Rental',
     startDateTime: '2026-05-16T08:00',
     fuelExpense: 0,
@@ -250,8 +250,8 @@ export const tripsSeed: Trip[] = [
 
 export const maintenanceSeed: MaintenanceSchedule[] = [
   {
-    id: 'pms-1',
-    vehicleId: 'vehicle-1',
+    id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    vehicleId: '11111111-1111-4111-8111-111111111111',
     title: '10,000 km PMS',
     dueDate: '2026-06-02',
     dueOdometer: 36000,
@@ -261,8 +261,8 @@ export const maintenanceSeed: MaintenanceSchedule[] = [
     notes: 'Oil, filters, brake inspection',
   },
   {
-    id: 'pms-2',
-    vehicleId: 'vehicle-2',
+    id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    vehicleId: '22222222-2222-4222-8222-222222222222',
     title: 'Brake and suspension inspection',
     dueDate: '2026-05-20',
     dueOdometer: 62000,
@@ -275,9 +275,9 @@ export const maintenanceSeed: MaintenanceSchedule[] = [
 
 export const documentsSeed: DocumentAttachment[] = [
   {
-    id: 'doc-1',
+    id: '12121212-1212-4121-8121-121212121212',
     entityType: 'Vehicle',
-    entityId: 'vehicle-1',
+    entityId: '11111111-1111-4111-8111-111111111111',
     originalFileName: 'MBZ-1024-insurance.pdf',
     fileUrl: '#',
     documentType: 'Insurance Policy',
@@ -285,9 +285,9 @@ export const documentsSeed: DocumentAttachment[] = [
     uploadedAt: '2026-05-01T10:00',
   },
   {
-    id: 'doc-2',
+    id: '34343434-3434-4343-8343-343434343434',
     entityType: 'Driver',
-    entityId: 'driver-2',
+    entityId: '44444444-4444-4444-8444-444444444444',
     originalFileName: 'carlo-license-front.jpg',
     fileUrl: '#',
     documentType: 'Driver License',
@@ -295,9 +295,9 @@ export const documentsSeed: DocumentAttachment[] = [
     uploadedAt: '2026-04-28T13:30',
   },
   {
-    id: 'doc-3',
+    id: '56565656-5656-4565-8565-565656565656',
     entityType: 'Booking',
-    entityId: 'booking-1',
+    entityId: '88888888-8888-4888-8888-888888888888',
     originalFileName: 'signed-rental-agreement.pdf',
     fileUrl: '#',
     documentType: 'Signed Contract',

@@ -97,6 +97,8 @@ const platformNavItems = [
   { to: '/admin/tenants', label: 'Tenants', icon: ShieldCheck },
 ]
 
+const documentEntityTypes = ['Vehicle', 'Driver', 'Renter', 'Booking', 'Trip', 'Maintenance'] as const
+
 type CompanyProfile = {
   name: string
   address: string
@@ -184,6 +186,18 @@ type AuditEntry = {
   summary: string
   actor: string
   createdAt: string
+}
+
+type DocumentEntityOption = {
+  id: string
+  entityType: string
+  label: string
+}
+
+type LockedDocumentEntity = {
+  entityType: string
+  entityId: string
+  label: string
 }
 
 const authStorageKey = 'metrobeez.auth'
@@ -309,11 +323,42 @@ function readApiError(text: string, fallback: string) {
   return fallback
 }
 
+async function uploadDocumentFromForm(form: FormData, session: AuthSession | null) {
+  if (!session?.token) {
+    throw new Error('Please sign in again before uploading documents.')
+  }
+
+  const file = form.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error('Choose the document file to upload.')
+  }
+
+  const entityType = formString(form, 'entityType')
+  const entityId = formString(form, 'entityId')
+  const documentType = formString(form, 'documentType')
+  if (!entityType || !entityId || !documentType) {
+    throw new Error('Choose a related record and document type before uploading.')
+  }
+
+  const upload = new FormData()
+  upload.append('file', file)
+  upload.append('entityType', entityType)
+  upload.append('entityId', entityId)
+  upload.append('documentType', documentType)
+
+  const expirationDate = formString(form, 'expirationDate')
+  if (expirationDate) {
+    upload.append('expirationDate', expirationDate)
+  }
+
+  return postForm<DocumentAttachment>('/api/documents/upload', upload, session.token)
+}
+
 const initialAuditEntries: AuditEntry[] = [
   {
     id: 'audit-trip-1',
     entityType: 'Trip',
-    entityId: 'trip-1',
+    entityId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     action: 'Trip started',
     summary: 'Starting odometer and assigned vehicle status were updated.',
     actor: 'System seed',
@@ -322,7 +367,7 @@ const initialAuditEntries: AuditEntry[] = [
   {
     id: 'audit-trip-2',
     entityType: 'Trip',
-    entityId: 'trip-2',
+    entityId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     action: 'Trip completed',
     summary: 'Ending odometer, expenses, payment status, and profit were recorded.',
     actor: 'System seed',
@@ -480,11 +525,11 @@ function App() {
             path="/vehicles"
             element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} documents={documents} trips={trips} />}
           />
-          <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} setVehicles={setVehicles} showToast={showToast} />} />
+          <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} setVehicles={setVehicles} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route path="/drivers" element={<DriversPage drivers={drivers} setDrivers={setDrivers} trips={trips} />} />
-          <Route path="/drivers/:id" element={<DriverDetailsPage data={data} setDrivers={setDrivers} showToast={showToast} />} />
+          <Route path="/drivers/:id" element={<DriverDetailsPage data={data} setDrivers={setDrivers} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route path="/renters" element={<RentersPage renters={renters} setRenters={setRenters} data={data} />} />
-          <Route path="/renters/:id" element={<RenterDetailsPage data={data} setRenters={setRenters} showToast={showToast} />} />
+          <Route path="/renters/:id" element={<RenterDetailsPage data={data} setRenters={setRenters} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route
             path="/bookings"
             element={
@@ -496,19 +541,19 @@ function App() {
               />
             }
           />
-          <Route path="/bookings/:id" element={<BookingDetailsPage data={data} setBookings={setBookings} showToast={showToast} />} />
+          <Route path="/bookings/:id" element={<BookingDetailsPage data={data} setBookings={setBookings} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route
             path="/trips"
             element={<TripsPage data={data} setTrips={setTrips} setVehicles={setVehicles} showToast={showToast} appendTripAudit={appendTripAudit} />}
           />
-          <Route path="/trips/:id" element={<TripDetailsPage data={data} setTrips={setTrips} showToast={showToast} appendTripAudit={appendTripAudit} />} />
+          <Route path="/trips/:id" element={<TripDetailsPage data={data} setTrips={setTrips} setDocuments={setDocuments} session={session} showToast={showToast} appendTripAudit={appendTripAudit} />} />
           <Route
             path="/maintenance"
-            element={<MaintenancePage data={data} maintenance={maintenance} setMaintenance={setMaintenance} showToast={showToast} />}
+            element={<MaintenancePage data={data} maintenance={maintenance} setMaintenance={setMaintenance} setDocuments={setDocuments} session={session} showToast={showToast} />}
           />
           <Route
             path="/documents"
-            element={<DocumentsPage documents={documents} setDocuments={setDocuments} data={data} showToast={showToast} />}
+            element={<DocumentsPage documents={documents} setDocuments={setDocuments} data={data} session={session} showToast={showToast} />}
           />
           <Route
             path="/notifications"
@@ -924,10 +969,14 @@ function VehiclesPage({
 function VehicleDetailsPage({
   data,
   setVehicles,
+  setDocuments,
+  session,
   showToast,
 }: {
   data: AppData
   setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const { id } = useParams()
@@ -936,7 +985,7 @@ function VehicleDetailsPage({
   if (!vehicle) return <NotFound title="Vehicle not found" />
 
   const relatedTrips = data.trips.filter((trip) => trip.vehicleId === vehicle.id)
-  const relatedDocs = data.documents.filter((doc) => doc.entityId === vehicle.id)
+  const relatedDocs = data.documents.filter((doc) => doc.entityType === 'Vehicle' && doc.entityId === vehicle.id)
 
   return (
     <Page>
@@ -967,13 +1016,16 @@ function VehicleDetailsPage({
             ))}
           </CompactList>
         </Panel>
-        <Panel title="Documents">
-          <CompactList>
-            {relatedDocs.map((doc) => (
-              <li key={doc.id}><span><strong>{doc.documentType}</strong><small>{doc.originalFileName}</small></span><small>{dateText(doc.expirationDate)}</small></li>
-            ))}
-          </CompactList>
-        </Panel>
+        <EntityDocumentsPanel
+          data={data}
+          entityType="Vehicle"
+          entityId={vehicle.id}
+          entityLabel={vehicleLabel(data, vehicle.id)}
+          documents={relatedDocs}
+          setDocuments={setDocuments}
+          session={session}
+          showToast={showToast}
+        />
       </TwoColumn>
       <Modal title="Edit vehicle" open={editOpen} onClose={() => setEditOpen(false)}>
         <VehicleForm
@@ -1058,10 +1110,14 @@ function DriversPage({
 function DriverDetailsPage({
   data,
   setDrivers,
+  setDocuments,
+  session,
   showToast,
 }: {
   data: AppData
   setDrivers: React.Dispatch<React.SetStateAction<Driver[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const { id } = useParams()
@@ -1069,7 +1125,7 @@ function DriverDetailsPage({
   const driver = data.drivers.find((item) => item.id === id)
   if (!driver) return <NotFound title="Driver not found" />
   const assignedTrips = data.trips.filter((trip) => trip.driverId === driver.id)
-  const docs = data.documents.filter((doc) => doc.entityId === driver.id)
+  const docs = data.documents.filter((doc) => doc.entityType === 'Driver' && doc.entityId === driver.id)
   return (
     <Page>
       <PageHeader
@@ -1093,11 +1149,16 @@ function DriverDetailsPage({
             {assignedTrips.map((trip) => <li key={trip.id}><span><strong>{trip.tripNumber}</strong><small>{vehicleLabel(data, trip.vehicleId)}</small></span><Badge status={trip.status} /></li>)}
           </CompactList>
         </Panel>
-        <Panel title="Documents">
-          <CompactList>
-            {docs.map((doc) => <li key={doc.id}><span><strong>{doc.documentType}</strong><small>{doc.originalFileName}</small></span><small>{dateText(doc.expirationDate)}</small></li>)}
-          </CompactList>
-        </Panel>
+        <EntityDocumentsPanel
+          data={data}
+          entityType="Driver"
+          entityId={driver.id}
+          entityLabel={driver.fullName}
+          documents={docs}
+          setDocuments={setDocuments}
+          session={session}
+          showToast={showToast}
+        />
       </TwoColumn>
       <Modal title="Edit driver" open={editOpen} onClose={() => setEditOpen(false)}>
         <DriverForm
@@ -1182,10 +1243,14 @@ function RentersPage({
 function RenterDetailsPage({
   data,
   setRenters,
+  setDocuments,
+  session,
   showToast,
 }: {
   data: AppData
   setRenters: React.Dispatch<React.SetStateAction<Renter[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const { id } = useParams()
@@ -1194,6 +1259,7 @@ function RenterDetailsPage({
   if (!renter) return <NotFound title="Renter not found" />
   const bookings = data.bookings.filter((booking) => booking.renterId === renter.id)
   const trips = data.trips.filter((trip) => trip.renterId === renter.id)
+  const docs = data.documents.filter((doc) => doc.entityType === 'Renter' && doc.entityId === renter.id)
   return (
     <Page>
       <PageHeader
@@ -1218,6 +1284,16 @@ function RenterDetailsPage({
           <CompactList>{trips.map((trip) => <li key={trip.id}><span><strong>{trip.tripNumber}</strong><small>{money.format(trip.grossRevenue)} gross</small></span><Badge status={trip.status} /></li>)}</CompactList>
         </Panel>
       </TwoColumn>
+      <EntityDocumentsPanel
+        data={data}
+        entityType="Renter"
+        entityId={renter.id}
+        entityLabel={renter.fullName}
+        documents={docs}
+        setDocuments={setDocuments}
+        session={session}
+        showToast={showToast}
+      />
       <Modal title="Edit renter" open={editOpen} onClose={() => setEditOpen(false)}>
         <RenterForm
           defaultValues={renter}
@@ -1360,16 +1436,21 @@ function BookingsPage({
 function BookingDetailsPage({
   data,
   setBookings,
+  setDocuments,
+  session,
   showToast,
 }: {
   data: AppData
   setBookings: React.Dispatch<React.SetStateAction<Booking[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const { id } = useParams()
   const [editOpen, setEditOpen] = useState(false)
   const booking = data.bookings.find((item) => item.id === id)
   if (!booking) return <NotFound title="Booking not found" />
+  const docs = data.documents.filter((doc) => doc.entityType === 'Booking' && doc.entityId === booking.id)
   return (
     <Page>
       <PageHeader
@@ -1390,6 +1471,16 @@ function BookingDetailsPage({
         ['Payment', booking.paymentStatus],
         ['Notes', booking.notes],
       ]} />
+      <EntityDocumentsPanel
+        data={data}
+        entityType="Booking"
+        entityId={booking.id}
+        entityLabel={booking.referenceNumber}
+        documents={docs}
+        setDocuments={setDocuments}
+        session={session}
+        showToast={showToast}
+      />
       <Modal title="Edit booking" open={editOpen} onClose={() => setEditOpen(false)}>
         <BookingForm
           data={data}
@@ -1493,11 +1584,15 @@ function TripsPage({
 function TripDetailsPage({
   data,
   setTrips,
+  setDocuments,
+  session,
   showToast,
   appendTripAudit,
 }: {
   data: AppData
   setTrips: React.Dispatch<React.SetStateAction<Trip[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
   appendTripAudit: (entityId: string, action: string, summary: string) => void
 }) {
@@ -1506,6 +1601,7 @@ function TripDetailsPage({
   const trip = data.trips.find((item) => item.id === id)
   if (!trip) return <NotFound title="Trip not found" />
   const auditHistory = data.audits.filter((entry) => entry.entityType === 'Trip' && entry.entityId === trip.id)
+  const docs = data.documents.filter((doc) => doc.entityType === 'Trip' && doc.entityId === trip.id)
   return (
     <Page>
       <PageHeader
@@ -1527,6 +1623,16 @@ function TripDetailsPage({
         ['Payment', `${trip.paymentStatus} · ${trip.paymentMethod || 'N/A'}`],
         ['Remarks', trip.remarks],
       ]} />
+      <EntityDocumentsPanel
+        data={data}
+        entityType="Trip"
+        entityId={trip.id}
+        entityLabel={trip.tripNumber}
+        documents={docs}
+        setDocuments={setDocuments}
+        session={session}
+        showToast={showToast}
+      />
       <Panel title="Audit history" action={<History size={18} />}>
         <CompactList>
           {auditHistory.map((entry) => (
@@ -1564,15 +1670,21 @@ function MaintenancePage({
   data,
   maintenance,
   setMaintenance,
+  setDocuments,
+  session,
   showToast,
 }: {
   data: AppData
   maintenance: MaintenanceSchedule[]
   setMaintenance: React.Dispatch<React.SetStateAction<MaintenanceSchedule[]>>
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [uploadTarget, setUploadTarget] = useState<MaintenanceSchedule | null>(null)
+  const [uploading, setUploading] = useState(false)
   const addSchedule = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -1588,6 +1700,22 @@ function MaintenancePage({
     setEditId(null)
     showToast({ title: 'PMS updated', detail: `${editingSchedule.title} changes were saved.` })
   }
+  const uploadMaintenanceDocument = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!uploadTarget) return
+
+    setUploading(true)
+    try {
+      const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
+      setDocuments((current) => [uploaded, ...current])
+      setUploadTarget(null)
+      showToast({ title: 'PMS document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+    } catch (error) {
+      showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setUploading(false)
+    }
+  }
   return (
     <Page>
       <PageHeader eyebrow="Maintenance" title="PMS schedules" action={<button className="primary-button" type="button" onClick={() => setModalOpen(true)}><Plus size={18} /> Schedule PMS</button>} />
@@ -1596,7 +1724,11 @@ function MaintenancePage({
           <article className="record-card" key={item.id}>
             <div className="record-card-head">
               <Wrench size={20} />
-              <span className="card-actions"><button className="icon-button" type="button" title="Edit PMS schedule" onClick={() => setEditId(item.id)}><Edit3 size={16} /></button><Badge status={item.status} /></span>
+              <span className="card-actions">
+                <button className="icon-button" type="button" title="Upload PMS document" onClick={() => setUploadTarget(item)}><Upload size={16} /></button>
+                <button className="icon-button" type="button" title="Edit PMS schedule" onClick={() => setEditId(item.id)}><Edit3 size={16} /></button>
+                <Badge status={item.status} />
+              </span>
             </div>
             <h3>{item.title}</h3>
             <p>{vehicleLabel(data, item.vehicleId)}</p>
@@ -1605,6 +1737,7 @@ function MaintenancePage({
               <div><dt>Due odometer</dt><dd>{item.dueOdometer.toLocaleString()} km</dd></div>
               <div><dt>Vendor</dt><dd>{item.vendorShop}</dd></div>
               <div><dt>Cost</dt><dd>{money.format(item.estimatedCost)}</dd></div>
+              <div><dt>Documents</dt><dd>{data.documents.filter((doc) => doc.entityType === 'Maintenance' && doc.entityId === item.id).length}</dd></div>
             </dl>
           </article>
         ))}
@@ -1615,6 +1748,16 @@ function MaintenancePage({
       <Modal title="Edit PMS schedule" open={Boolean(editingSchedule)} onClose={() => setEditId(null)}>
         <MaintenanceForm data={data} defaultValues={editingSchedule} onSubmit={editSchedule} submitLabel="Save PMS changes" />
       </Modal>
+      <Modal title="Upload PMS document" open={Boolean(uploadTarget)} onClose={() => setUploadTarget(null)}>
+        {uploadTarget && (
+          <DocumentForm
+            data={data}
+            lockedEntity={{ entityType: 'Maintenance', entityId: uploadTarget.id, label: uploadTarget.title }}
+            onSubmit={uploadMaintenanceDocument}
+            submitLabel={uploading ? 'Uploading...' : 'Upload document'}
+          />
+        )}
+      </Modal>
     </Page>
   )
 }
@@ -1623,32 +1766,33 @@ function DocumentsPage({
   documents,
   setDocuments,
   data,
+  session,
   showToast,
 }: {
   documents: DocumentAttachment[]
   setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
   data: AppData
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const filtered = documents.filter((doc) => [doc.entityType, doc.documentType, doc.originalFileName].join(' ').toLowerCase().includes(query.toLowerCase()))
 
-  const addDocument = (event: FormEvent<HTMLFormElement>) => {
+  const addDocument = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setDocuments((current) => [...current, documentFromForm(form)])
-    setModalOpen(false)
-  }
-  const editingDocument = documents.find((doc) => doc.id === editId)
-  const editDocument = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!editingDocument) return
-    const form = new FormData(event.currentTarget)
-    setDocuments((current) => current.map((doc) => doc.id === editingDocument.id ? documentFromForm(form, editingDocument) : doc))
-    setEditId(null)
-    showToast({ title: 'Document updated', detail: `${editingDocument.documentType} changes were saved.` })
+    setUploading(true)
+    try {
+      const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
+      setDocuments((current) => [uploaded, ...current])
+      setModalOpen(false)
+      showToast({ title: 'Document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+    } catch (error) {
+      showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -1667,16 +1811,18 @@ function DocumentsPage({
               <td>{dateText(doc.expirationDate)}</td>
               <td>{dateText(doc.uploadedAt)}</td>
               <td><Badge status={doc.expirationDate ? (daysUntil(doc.expirationDate) < 0 ? 'Expired' : daysUntil(doc.expirationDate) <= 7 ? 'Due Soon' : 'Clear') : 'Clear'} /></td>
-              <td className="table-actions"><button className="icon-button" type="button" title="Edit document" onClick={() => setEditId(doc.id)}><Edit3 size={16} /></button></td>
+              <td className="table-actions">
+                {doc.fileUrl && doc.fileUrl !== '#'
+                  ? <a className="icon-button" href={doc.fileUrl} target="_blank" rel="noreferrer" title="Open document"><FileText size={16} /></a>
+                  : <span className="muted-action">Stored</span>}
+              </td>
             </tr>
           ))}
         </tbody>
       </Table>
+      {filtered.length === 0 && <EmptyState title="No documents found" detail="Upload IDs, contracts, receipts, permits, and expiry-sensitive files." />}
       <Modal title="Upload document" open={modalOpen} onClose={() => setModalOpen(false)}>
-        <DocumentForm data={data} onSubmit={addDocument} />
-      </Modal>
-      <Modal title="Edit document" open={Boolean(editingDocument)} onClose={() => setEditId(null)}>
-        <DocumentForm data={data} defaultValues={editingDocument} onSubmit={editDocument} submitLabel="Save document changes" />
+        <DocumentForm data={data} onSubmit={addDocument} submitLabel={uploading ? 'Uploading...' : 'Upload document'} />
       </Modal>
     </Page>
   )
@@ -2385,21 +2531,60 @@ function DocumentForm({
   onSubmit,
   defaultValues,
   submitLabel = 'Upload document',
+  lockedEntity,
 }: {
   data: AppData
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   defaultValues?: DocumentAttachment
   submitLabel?: string
+  lockedEntity?: LockedDocumentEntity
 }) {
+  const [entityType, setEntityType] = useState(lockedEntity?.entityType ?? defaultValues?.entityType ?? 'Vehicle')
   const entityOptions = documentEntityOptions(data)
+  const filteredEntityOptions = entityOptions.filter((item) => item.entityType === entityType)
+  const documentTypes = documentTypeOptionsFor(entityType)
+  const selectedDocumentType = defaultValues?.documentType && documentTypes.includes(defaultValues.documentType)
+    ? defaultValues.documentType
+    : documentTypes[0]
+
   return (
     <form className="modal-form" onSubmit={onSubmit}>
-      <label className="field"><span>Entity type</span><select name="entityType" defaultValue={defaultValues?.entityType ?? 'Vehicle'}><option>Vehicle</option><option>Driver</option><option>Renter</option><option>Booking</option><option>Trip</option></select></label>
-      <label className="field"><span>Entity</span><select name="entityId" defaultValue={defaultValues?.entityId}>{entityOptions.map((item) => <option key={`${item.entityType}-${item.id}`} value={item.id}>{item.label}</option>)}</select></label>
-      <Field label="Document type" name="documentType" defaultValue={defaultValues?.documentType} required />
-      <Field label="Original file name" name="originalFileName" defaultValue={defaultValues?.originalFileName ?? 'document.pdf'} />
-      <Field label="File URL" name="fileUrl" defaultValue={defaultValues?.fileUrl ?? '#'} />
+      {lockedEntity ? (
+        <>
+          <input type="hidden" name="entityType" value={lockedEntity.entityType} />
+          <input type="hidden" name="entityId" value={lockedEntity.entityId} />
+          <label className="field full">
+            <span>Related record</span>
+            <input value={`${lockedEntity.entityType} - ${lockedEntity.label}`} readOnly />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="field">
+            <span>Module</span>
+            <select name="entityType" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+              {documentEntityTypes.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Record</span>
+            <select key={entityType} name="entityId" defaultValue={defaultValues?.entityId ?? filteredEntityOptions[0]?.id} required>
+              {filteredEntityOptions.map((item) => <option key={`${item.entityType}-${item.id}`} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+        </>
+      )}
+      <label className="field">
+        <span>Document type</span>
+        <select key={`${entityType}-document-type`} name="documentType" defaultValue={selectedDocumentType} required>
+          {documentTypes.map((item) => <option key={item}>{item}</option>)}
+        </select>
+      </label>
       <Field label="Expiration date" name="expirationDate" type="date" defaultValue={defaultValues?.expirationDate} />
+      <label className="field full">
+        <span>Document file</span>
+        <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,image/*,application/pdf" required />
+      </label>
       <button className="primary-button full" type="submit"><Upload size={18} /> {submitLabel}</button>
     </form>
   )
@@ -2441,6 +2626,74 @@ function Panel({ title, action, children }: { title: string; action?: React.Reac
       <header><h2>{title}</h2>{action}</header>
       {children}
     </section>
+  )
+}
+
+function EntityDocumentsPanel({
+  data,
+  entityType,
+  entityId,
+  entityLabel,
+  documents,
+  setDocuments,
+  session,
+  showToast,
+}: {
+  data: AppData
+  entityType: string
+  entityId: string
+  entityLabel: string
+  documents: DocumentAttachment[]
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
+}) {
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const upload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setUploading(true)
+    try {
+      const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
+      setDocuments((current) => [uploaded, ...current])
+      setUploadOpen(false)
+      showToast({ title: 'Document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+    } catch (error) {
+      showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <Panel
+      title="Documents"
+      action={<button className="secondary-button" type="button" onClick={() => setUploadOpen(true)}><Upload size={16} /> Upload</button>}
+    >
+      <CompactList>
+        {documents.map((doc) => (
+          <li key={doc.id}>
+            <span>
+              <strong>{doc.documentType}</strong>
+              <small>{doc.originalFileName}{doc.expirationDate ? ` - expires ${dateText(doc.expirationDate)}` : ''}</small>
+            </span>
+            {doc.fileUrl && doc.fileUrl !== '#'
+              ? <a className="secondary-button compact-button" href={doc.fileUrl} target="_blank" rel="noreferrer">Open</a>
+              : <Badge status={doc.expirationDate ? (daysUntil(doc.expirationDate) <= 7 ? 'Due Soon' : 'Clear') : 'Clear'} />}
+          </li>
+        ))}
+      </CompactList>
+      {documents.length === 0 && <EmptyState title="No documents yet" detail="Upload compliance files, IDs, contracts, or receipts for this record." />}
+      <Modal title={`Upload ${entityType.toLowerCase()} document`} open={uploadOpen} onClose={() => setUploadOpen(false)}>
+        <DocumentForm
+          data={data}
+          lockedEntity={{ entityType, entityId, label: entityLabel }}
+          onSubmit={upload}
+          submitLabel={uploading ? 'Uploading...' : 'Upload document'}
+        />
+      </Modal>
+    </Panel>
   )
 }
 
@@ -2610,6 +2863,9 @@ function entityLabel(data: AppData, entityType: string, entityId: string) {
   if (entityType === 'Vehicle') return vehicleLabel(data, entityId)
   if (entityType === 'Driver') return driverName(data, entityId)
   if (entityType === 'Renter') return renterName(data, entityId)
+  if (entityType === 'Booking') return data.bookings.find((item) => item.id === entityId)?.referenceNumber || entityId
+  if (entityType === 'Trip') return data.trips.find((item) => item.id === entityId)?.tripNumber || entityId
+  if (entityType === 'Maintenance') return data.maintenance.find((item) => item.id === entityId)?.title || entityId
   return entityId
 }
 
@@ -2762,19 +3018,6 @@ function maintenanceFromForm(form: FormData, existing?: MaintenanceSchedule): Ma
   }
 }
 
-function documentFromForm(form: FormData, existing?: DocumentAttachment): DocumentAttachment {
-  return {
-    id: existing?.id ?? crypto.randomUUID(),
-    entityType: formString(form, 'entityType', existing?.entityType ?? 'Vehicle'),
-    entityId: formString(form, 'entityId', existing?.entityId),
-    originalFileName: formString(form, 'originalFileName', existing?.originalFileName ?? 'document.pdf'),
-    fileUrl: formString(form, 'fileUrl', existing?.fileUrl ?? '#'),
-    documentType: formString(form, 'documentType', existing?.documentType),
-    expirationDate: formString(form, 'expirationDate', existing?.expirationDate),
-    uploadedAt: existing?.uploadedAt ?? new Date().toISOString(),
-  }
-}
-
 function dateTimeInputValue(value?: string) {
   return value ? value.slice(0, 16) : undefined
 }
@@ -2786,7 +3029,27 @@ function documentEntityOptions(data: AppData) {
     ...data.renters.map((renter) => ({ id: renter.id, entityType: 'Renter', label: `Renter - ${renter.fullName}` })),
     ...data.bookings.map((booking) => ({ id: booking.id, entityType: 'Booking', label: `Booking - ${booking.referenceNumber}` })),
     ...data.trips.map((trip) => ({ id: trip.id, entityType: 'Trip', label: `Trip - ${trip.tripNumber}` })),
-  ]
+    ...data.maintenance.map((item) => ({ id: item.id, entityType: 'Maintenance', label: `PMS - ${item.title}` })),
+  ] satisfies DocumentEntityOption[]
+}
+
+function documentTypeOptionsFor(entityType: string) {
+  switch (entityType) {
+    case 'Vehicle':
+      return ['OR', 'CR', 'Insurance Policy', 'Registration', 'Deed of Sale', 'Emission Test', 'LTFRB / CPC', 'PMS Record', 'Warranty', 'Violation / Incident Report', 'Other']
+    case 'Driver':
+      return ['Driver License Front', 'Driver License Back', 'NBI Clearance', 'Barangay Clearance', 'Police Clearance', 'Medical Certificate', 'Training Certificate', 'Other']
+    case 'Renter':
+      return ['Valid ID Front', 'Valid ID Back', 'Driver License', 'Signed Rental Agreement', 'Authorization Letter', 'Other']
+    case 'Booking':
+      return ['Signed Contract', 'Booking Agreement', 'Deposit Receipt', 'Authorization Document', 'Other']
+    case 'Trip':
+      return ['Fuel Receipt', 'Toll Receipt', 'Parking Receipt', 'Customer Contract', 'Proof of Delivery', 'Trip Photo', 'Other']
+    case 'Maintenance':
+      return ['PMS Receipt', 'Vendor Invoice', 'Service Report', 'Parts Receipt', 'Warranty Claim', 'Other']
+    default:
+      return ['General Document', 'Other']
+  }
 }
 
 function initials(value?: string) {
