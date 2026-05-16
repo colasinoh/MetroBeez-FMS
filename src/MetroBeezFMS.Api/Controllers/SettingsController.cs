@@ -140,7 +140,7 @@ public sealed class SettingsController : ControllerBase
         }
 
         var normalized = email.Trim().ToLowerInvariant();
-        var bytes = MD5.HashData(Encoding.UTF8.GetBytes(normalized));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
         var hash = Convert.ToHexString(bytes).ToLowerInvariant();
         return $"https://www.gravatar.com/avatar/{hash}?s=160&d=404";
     }

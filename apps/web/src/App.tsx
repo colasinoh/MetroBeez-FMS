@@ -324,6 +324,7 @@ function App() {
   const [notifications, setNotifications] = useState(notificationsSeed)
   const [auditEntries, setAuditEntries] = useState(initialAuditEntries)
   const [toast, setToast] = useState<Toast | null>(null)
+  const [clientGravatarUrl, setClientGravatarUrl] = useState('')
 
   const data = { vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications, audits: auditEntries }
   const showToast = (nextToast: Toast) => {
@@ -357,6 +358,25 @@ function App() {
       active = false
     }
   }, [session?.token, session?.userId])
+  useEffect(() => {
+    let active = true
+    const email = userProfile.email || session?.email
+    gravatarUrlFromEmail(email)
+      .then((url) => {
+        if (active) {
+          setClientGravatarUrl(url)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setClientGravatarUrl('')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [userProfile.email, session?.email])
   const handleAuthenticated = (auth: AuthResponse) => {
     const nextSession = storeSession(auth)
     setSession(nextSession)
@@ -409,6 +429,7 @@ function App() {
               company={company}
               session={session}
               userProfile={userProfile}
+              clientGravatarUrl={clientGravatarUrl}
               notifications={notifications}
               onLogout={handleLogout}
             />
@@ -457,7 +478,7 @@ function App() {
           <Route path="/reports" element={<ReportsPage data={data} />} />
           <Route
             path="/settings"
-            element={<SettingsPage company={company} setCompany={setCompany} session={session} setSession={setSession} userProfile={userProfile} setUserProfile={setUserProfile} showToast={showToast} />}
+            element={<SettingsPage company={company} setCompany={setCompany} session={session} setSession={setSession} userProfile={userProfile} clientGravatarUrl={clientGravatarUrl} setUserProfile={setUserProfile} showToast={showToast} />}
           />
         </Route>
       </Routes>
@@ -471,6 +492,7 @@ function Shell({
   company,
   session,
   userProfile,
+  clientGravatarUrl,
   notifications,
   onLogout,
 }: {
@@ -478,6 +500,7 @@ function Shell({
   company: CompanyProfile
   session: AuthSession | null
   userProfile: UserProfile
+  clientGravatarUrl: string
   notifications: NotificationItem[]
   onLogout: () => void
 }) {
@@ -526,7 +549,7 @@ function Shell({
             {unreadCount > 0 && <span className="notification-count">{unreadCount}</span>}
           </button>
           <button className="avatar-button" type="button" title="Account menu" onClick={() => navigate('/settings')}>
-            <AvatarImage src={userProfile.profilePhotoUrl || userProfile.gravatarUrl} fallback={initials(userProfile.fullName || session?.fullName)} />
+            <AvatarImage sources={avatarSources(userProfile, clientGravatarUrl)} fallback={initials(userProfile.fullName || session?.fullName)} />
           </button>
           <button className="icon-button" type="button" title="Logout" onClick={onLogout}>
             <LogOut size={18} />
@@ -1572,6 +1595,7 @@ function SettingsPage({
   session,
   setSession,
   userProfile,
+  clientGravatarUrl,
   setUserProfile,
   showToast,
 }: {
@@ -1580,6 +1604,7 @@ function SettingsPage({
   session: AuthSession | null
   setSession: React.Dispatch<React.SetStateAction<AuthSession | null>>
   userProfile: UserProfile
+  clientGravatarUrl: string
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   showToast: (toast: Toast) => void
 }) {
@@ -1679,7 +1704,7 @@ function SettingsPage({
         <Panel title="Super user profile">
           <div className="settings-avatar-row">
             <span className="avatar-preview">
-              <AvatarImage src={userProfile.profilePhotoUrl || userProfile.gravatarUrl} fallback={initials(userProfile.fullName || session?.fullName)} />
+              <AvatarImage sources={avatarSources(userProfile, clientGravatarUrl)} fallback={initials(userProfile.fullName || session?.fullName)} />
             </span>
             <label className="field">
               <span><Camera size={14} /> Profile photo</span>
@@ -2589,18 +2614,39 @@ function normalizeUserProfile(profile: Partial<UserProfile>, session?: AuthSessi
   }
 }
 
-function AvatarImage({ src, fallback }: { src?: string; fallback: string }) {
-  const [failed, setFailed] = useState(false)
+function avatarSources(profile: UserProfile, clientGravatarUrl: string) {
+  return [profile.profilePhotoUrl, profile.gravatarUrl, clientGravatarUrl].filter(Boolean) as string[]
+}
+
+async function gravatarUrlFromEmail(email?: string) {
+  const normalized = email?.trim().toLowerCase()
+  if (!normalized || !window.crypto?.subtle) {
+    return ''
+  }
+
+  const bytes = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+  const hash = Array.from(new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+
+  return `https://www.gravatar.com/avatar/${hash}?s=160&d=404`
+}
+
+function AvatarImage({ sources, fallback }: { sources: string[]; fallback: string }) {
+  const [sourceIndex, setSourceIndex] = useState(0)
+  const sourceKey = sources.join('|')
 
   useEffect(() => {
-    setFailed(false)
-  }, [src])
+    setSourceIndex(0)
+  }, [sourceKey])
 
-  if (!src || failed) {
+  const src = sources[sourceIndex]
+
+  if (!src) {
     return <>{fallback}</>
   }
 
-  return <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+  return <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setSourceIndex((current) => current + 1)} />
 }
 
 export default App
