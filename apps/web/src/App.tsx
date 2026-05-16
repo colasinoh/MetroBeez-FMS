@@ -111,6 +111,7 @@ type UserProfile = {
   fullName: string
   email: string
   profilePhotoUrl: string
+  profilePhotoDisplayUrl?: string
   gravatarUrl?: string
   address: string
   mobileNumber: string
@@ -203,6 +204,8 @@ type LockedDocumentEntity = {
 const authStorageKey = 'metrobeez.auth'
 const apiBaseUrl = ((import.meta.env.VITE_API_BASE_URL as string | undefined)
   ?? (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:5117' : '')).replace(/\/$/, '')
+const s3AssetRegion = ((import.meta.env.VITE_AWS_REGION as string | undefined) ?? 'ap-southeast-1').trim()
+const s3PublicBaseUrl = ((import.meta.env.VITE_S3_PUBLIC_BASE_URL as string | undefined) ?? '').replace(/\/$/, '')
 
 function loadStoredSession() {
   try {
@@ -388,6 +391,7 @@ function App() {
     fullName: session?.fullName ?? '',
     email: session?.email ?? '',
     profilePhotoUrl: '',
+    profilePhotoDisplayUrl: '',
     gravatarUrl: '',
     address: '',
     mobileNumber: '',
@@ -1928,6 +1932,27 @@ function SettingsPage({
   showToast: (toast: Toast) => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState('')
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl)
+      }
+    }
+  }, [photoPreviewUrl])
+
+  const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    setPhotoPreviewUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current)
+      }
+
+      return file ? URL.createObjectURL(file) : ''
+    })
+  }
+
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!session?.token) {
@@ -1946,7 +1971,7 @@ function SettingsPage({
     }
 
     try {
-      let uploadedPhotoUrl = String(form.get('profilePhotoUrl') || userProfile.profilePhotoUrl || '')
+      let uploadedPhotoUrl = userProfile.profilePhotoUrl || ''
       const profilePhotoFile = form.get('profilePhotoFile')
       if (profilePhotoFile instanceof File && profilePhotoFile.size > 0) {
         const uploadForm = new FormData()
@@ -1978,6 +2003,13 @@ function SettingsPage({
       const normalizedProfile = normalizeUserProfile(savedProfile, session)
       setCompany(nextCompany)
       setUserProfile(normalizedProfile)
+      setPhotoPreviewUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current)
+        }
+
+        return ''
+      })
       const nextSession = {
         ...session,
         fullName: normalizedProfile.fullName,
@@ -2023,17 +2055,16 @@ function SettingsPage({
         <Panel title="Super user profile">
           <div className="settings-avatar-row">
             <span className="avatar-preview">
-              <AvatarImage sources={avatarSources(userProfile, clientGravatarUrl)} fallback={initials(userProfile.fullName || session?.fullName)} />
+              <AvatarImage sources={[photoPreviewUrl, ...avatarSources(userProfile, clientGravatarUrl)]} fallback={initials(userProfile.fullName || session?.fullName)} />
             </span>
             <label className="field">
               <span><Camera size={14} /> Profile photo</span>
-              <input name="profilePhotoFile" type="file" accept="image/*" />
+              <input name="profilePhotoFile" type="file" accept="image/*" onChange={handleProfilePhotoChange} />
             </label>
           </div>
           <div className="form-grid">
             <Field label="Full name" name="fullName" defaultValue={userProfile.fullName || session?.fullName || ''} required />
             <Field label="Email" name="email" type="email" defaultValue={userProfile.email || session?.email || ''} readOnly />
-            <Field label="Profile photo URL" name="profilePhotoUrl" defaultValue={userProfile.profilePhotoUrl} />
             <Field label="Mobile number" name="mobileNumber" defaultValue={userProfile.mobileNumber} />
             <Field label="Address" name="userAddress" defaultValue={userProfile.address} />
             <Field label="Job title" name="jobTitle" defaultValue={userProfile.jobTitle} />
@@ -3062,6 +3093,7 @@ function normalizeUserProfile(profile: Partial<UserProfile>, session?: AuthSessi
     fullName: profile.fullName || session?.fullName || '',
     email: profile.email || session?.email || '',
     profilePhotoUrl: profile.profilePhotoUrl || '',
+    profilePhotoDisplayUrl: profile.profilePhotoDisplayUrl || '',
     gravatarUrl: profile.gravatarUrl || '',
     address: profile.address || '',
     mobileNumber: profile.mobileNumber || '',
@@ -3075,7 +3107,48 @@ function normalizeUserProfile(profile: Partial<UserProfile>, session?: AuthSessi
 }
 
 function avatarSources(profile: UserProfile, clientGravatarUrl: string) {
-  return [profile.profilePhotoUrl, profile.gravatarUrl, clientGravatarUrl].filter(Boolean) as string[]
+  return [profile.profilePhotoDisplayUrl, profile.profilePhotoUrl, profile.gravatarUrl, clientGravatarUrl]
+    .map(displayableAssetUrl)
+    .filter(Boolean) as string[]
+}
+
+function displayableAssetUrl(value?: string | null) {
+  const rawValue = value?.trim()
+  if (!rawValue) {
+    return ''
+  }
+
+  if (/^(https?:|blob:|data:)/i.test(rawValue)) {
+    return rawValue
+  }
+
+  if (rawValue.startsWith('/')) {
+    return `${apiBaseUrl}${rawValue}`
+  }
+
+  if (rawValue.startsWith('s3://')) {
+    const withoutScheme = rawValue.slice('s3://'.length)
+    const slashIndex = withoutScheme.indexOf('/')
+    if (slashIndex <= 0) {
+      return ''
+    }
+
+    const bucket = withoutScheme.slice(0, slashIndex)
+    let key = withoutScheme.slice(slashIndex + 1)
+    if (s3PublicBaseUrl) {
+      const prefixMatch = s3PublicBaseUrl.match(/\/([^/]+)$/)
+      const trailingPrefix = prefixMatch?.[1]
+      if (trailingPrefix && key.startsWith(`${trailingPrefix}/`)) {
+        key = key.slice(trailingPrefix.length + 1)
+      }
+
+      return `${s3PublicBaseUrl}/${encodeURI(key)}`
+    }
+
+    return `https://${bucket}.s3.${s3AssetRegion}.amazonaws.com/${encodeURI(key)}`
+  }
+
+  return ''
 }
 
 async function gravatarUrlFromEmail(email?: string) {

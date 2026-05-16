@@ -64,6 +64,42 @@ public sealed class S3FileStorageService : IFileStorageService
         return new StoredFile(key, originalFileName, fileUrl, contentType, stream.CanSeek ? stream.Length : 0);
     }
 
+    public Task<string?> GetDisplayUrlAsync(string? fileUrl, TimeSpan? expiresIn = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        if (Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri)
+            && (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Task.FromResult<string?>(fileUrl);
+        }
+
+        var parsed = ParseS3Uri(fileUrl);
+        if (parsed is null)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        var (bucket, key) = parsed.Value;
+        if (!string.IsNullOrWhiteSpace(_publicBaseUrl))
+        {
+            return Task.FromResult<string?>(BuildPublicUrl(key));
+        }
+
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = bucket,
+            Key = key,
+            Expires = DateTime.UtcNow.Add(expiresIn ?? TimeSpan.FromMinutes(30))
+        };
+
+        return Task.FromResult<string?>(_s3Client.GetPreSignedURL(request));
+    }
+
     public async Task EnsureTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
         var tenantRootKey = TenantRootKey(tenantStorageRoot);
@@ -137,6 +173,23 @@ public sealed class S3FileStorageService : IFileStorageService
         }
 
         return $"{baseUrl}/{key}";
+    }
+
+    private (string Bucket, string Key)? ParseS3Uri(string value)
+    {
+        if (!value.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var withoutScheme = value["s3://".Length..];
+        var slashIndex = withoutScheme.IndexOf('/');
+        if (slashIndex <= 0 || slashIndex == withoutScheme.Length - 1)
+        {
+            return null;
+        }
+
+        return (withoutScheme[..slashIndex], withoutScheme[(slashIndex + 1)..]);
     }
 
     private static string NormalizePrefix(string value)

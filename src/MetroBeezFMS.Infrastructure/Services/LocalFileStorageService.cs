@@ -42,6 +42,11 @@ public sealed class LocalFileStorageService : IFileStorageService
         return new StoredFile(fileName, originalFileName, publicPath, contentType, fileInfo.Length);
     }
 
+    public Task<string?> GetDisplayUrlAsync(string? fileUrl, TimeSpan? expiresIn = null, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(fileUrl);
+    }
+
     public Task EnsureTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
         var safeTenantStorageRoot = NormalizeTenantStorageRoot(tenantStorageRoot);

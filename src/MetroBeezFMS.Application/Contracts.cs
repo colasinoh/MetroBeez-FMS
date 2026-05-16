@@ -31,6 +31,7 @@ public sealed record UserProfileDto(
     string FullName,
     string Email,
     string? ProfilePhotoUrl,
+    string? ProfilePhotoDisplayUrl,
     string? GravatarUrl,
     string? Address,
     string? MobileNumber,

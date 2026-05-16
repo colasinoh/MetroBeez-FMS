@@ -45,14 +45,14 @@ public sealed class SettingsController : ControllerBase
     }
 
     [HttpGet("me")]
-    public async Task<ActionResult<UserProfileDto>> Me()
+    public async Task<ActionResult<UserProfileDto>> Me(CancellationToken cancellationToken)
     {
         var user = await CurrentUserAsync();
-        return user is null ? Unauthorized() : Ok(ToProfileDto(user));
+        return user is null ? Unauthorized() : Ok(await ToProfileDtoAsync(user, cancellationToken));
     }
 
     [HttpPut("me")]
-    public async Task<ActionResult<UserProfileDto>> UpdateMe(UpdateUserProfileRequest request)
+    public async Task<ActionResult<UserProfileDto>> UpdateMe(UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         var user = await CurrentUserAsync();
         if (user is null)
@@ -81,7 +81,7 @@ public sealed class SettingsController : ControllerBase
             return ValidationProblem(string.Join("; ", result.Errors.Select(x => x.Description)));
         }
 
-        return Ok(ToProfileDto(user));
+        return Ok(await ToProfileDtoAsync(user, cancellationToken));
     }
 
     [HttpPost("profile-photo")]
@@ -116,7 +116,7 @@ public sealed class SettingsController : ControllerBase
             return ValidationProblem(string.Join("; ", result.Errors.Select(x => x.Description)));
         }
 
-        return Ok(ToProfileDto(user));
+        return Ok(await ToProfileDtoAsync(user, cancellationToken));
     }
 
     private async Task<AppUser?> CurrentUserAsync()
@@ -125,13 +125,15 @@ public sealed class SettingsController : ControllerBase
         return Guid.TryParse(userId, out var id) ? await _userManager.FindByIdAsync(id.ToString()) : null;
     }
 
-    private static UserProfileDto ToProfileDto(AppUser user)
+    private async Task<UserProfileDto> ToProfileDtoAsync(AppUser user, CancellationToken cancellationToken)
     {
+        var profilePhotoDisplayUrl = await _fileStorageService.GetDisplayUrlAsync(user.ProfilePhotoUrl, TimeSpan.FromMinutes(30), cancellationToken);
         return new UserProfileDto(
             user.Id,
             user.FullName,
             user.Email ?? "",
             user.ProfilePhotoUrl,
+            profilePhotoDisplayUrl,
             GravatarUrl(user.Email),
             user.Address,
             user.PhoneNumber,
