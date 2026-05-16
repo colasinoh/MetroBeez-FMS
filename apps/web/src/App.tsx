@@ -2633,20 +2633,44 @@ async function gravatarUrlFromEmail(email?: string) {
 }
 
 function AvatarImage({ sources, fallback }: { sources: string[]; fallback: string }) {
-  const [sourceIndex, setSourceIndex] = useState(0)
+  const [loadedSrc, setLoadedSrc] = useState('')
   const sourceKey = sources.join('|')
 
   useEffect(() => {
-    setSourceIndex(0)
+    let cancelled = false
+    const candidates = Array.from(new Set(sources.filter(Boolean)))
+
+    setLoadedSrc('')
+
+    const tryCandidate = (index: number) => {
+      const src = candidates[index]
+      if (!src || cancelled) {
+        return
+      }
+
+      const image = new Image()
+      image.referrerPolicy = 'no-referrer'
+      image.onload = () => {
+        if (!cancelled) {
+          setLoadedSrc(src)
+        }
+      }
+      image.onerror = () => tryCandidate(index + 1)
+      image.src = src
+    }
+
+    tryCandidate(0)
+
+    return () => {
+      cancelled = true
+    }
   }, [sourceKey])
 
-  const src = sources[sourceIndex]
-
-  if (!src) {
+  if (!loadedSrc) {
     return <>{fallback}</>
   }
 
-  return <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setSourceIndex((current) => current + 1)} />
+  return <img src={loadedSrc} alt="" referrerPolicy="no-referrer" />
 }
 
 export default App
