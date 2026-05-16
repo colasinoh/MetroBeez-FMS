@@ -71,7 +71,10 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
 
         try
         {
-            await _fileStorageService.DeleteTenantRootAsync(tenant.Id.ToString("N"), cancellationToken);
+            foreach (var storageRoot in StorageRootsFor(tenant))
+            {
+                await _fileStorageService.DeleteTenantRootAsync(storageRoot, cancellationToken);
+            }
         }
         catch (Exception exception)
         {
@@ -195,6 +198,14 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
             tenant.Users.Count,
             tenant.CreatedAt,
             tenant.UpdatedAt);
+    }
+
+    private static IEnumerable<string> StorageRootsFor(Tenant tenant)
+    {
+        var legacyRoot = tenant.Id.ToString("N");
+        return new[] { tenant.Slug, legacyRoot }
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)!;
     }
 
     private void EnsureDroppableDatabaseName(string databaseName)

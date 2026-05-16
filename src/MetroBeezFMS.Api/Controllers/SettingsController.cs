@@ -19,17 +19,20 @@ public sealed class SettingsController : ControllerBase
     private readonly TenantDbContextFactory _tenantDbContextFactory;
     private readonly UserManager<AppUser> _userManager;
     private readonly IFileStorageService _fileStorageService;
+    private readonly ITenantStoragePathResolver _tenantStoragePathResolver;
     private readonly ICurrentTenantService _currentTenant;
 
     public SettingsController(
         TenantDbContextFactory tenantDbContextFactory,
         UserManager<AppUser> userManager,
         IFileStorageService fileStorageService,
+        ITenantStoragePathResolver tenantStoragePathResolver,
         ICurrentTenantService currentTenant)
     {
         _tenantDbContextFactory = tenantDbContextFactory;
         _userManager = userManager;
         _fileStorageService = fileStorageService;
+        _tenantStoragePathResolver = tenantStoragePathResolver;
         _currentTenant = currentTenant;
     }
 
@@ -97,7 +100,14 @@ public sealed class SettingsController : ControllerBase
         }
 
         await using var stream = file.OpenReadStream();
-        var storedFile = await _fileStorageService.SaveAsync(stream, file.FileName, file.ContentType, _currentTenant.TenantId.Value.ToString("N"), cancellationToken);
+        var tenantStorageRoot = await _tenantStoragePathResolver.GetStorageRootAsync(_currentTenant.TenantId.Value, cancellationToken);
+        var storedFile = await _fileStorageService.SaveAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            tenantStorageRoot,
+            TenantStorageFolders.ProfilePhotos,
+            cancellationToken);
         user.ProfilePhotoUrl = storedFile.FileUrl;
 
         var result = await _userManager.UpdateAsync(user);

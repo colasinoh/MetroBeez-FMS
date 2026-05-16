@@ -50,6 +50,7 @@ public static class DependencyInjection
         });
         services.AddScoped<ITenantDatabaseProvisioner, TenantDatabaseProvisioner>();
         services.AddScoped<ITenantAdministrationService, TenantAdministrationService>();
+        services.AddScoped<ITenantStoragePathResolver, TenantStoragePathResolver>();
         services.AddScoped<TenantDbContextFactory>();
         services.AddScoped<ITenantDbContextFactory>(sp => sp.GetRequiredService<TenantDbContextFactory>());
         services.AddHostedService<ReminderBackgroundService>();

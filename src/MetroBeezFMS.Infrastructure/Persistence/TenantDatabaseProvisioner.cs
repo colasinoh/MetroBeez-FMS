@@ -34,7 +34,7 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
 
         if (existingTenant is not null)
         {
-            await _fileStorageService.EnsureTenantRootAsync(existingTenant.Id.ToString("N"), cancellationToken);
+            await _fileStorageService.EnsureTenantRootAsync(StorageRootFor(existingTenant), cancellationToken);
             return existingTenant;
         }
 
@@ -66,7 +66,7 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
         await _centralDbContext.SaveChangesAsync(cancellationToken);
 
         await CreateDatabaseIfMissingAsync(databaseName, cancellationToken);
-        await _fileStorageService.EnsureTenantRootAsync(tenant.Id.ToString("N"), cancellationToken);
+        await _fileStorageService.EnsureTenantRootAsync(tenant.Slug, cancellationToken);
 
         var options = new DbContextOptionsBuilder<TenantDbContext>()
             .UseNpgsql(DatabaseConnectionFactory.BuildTenantConnectionString(_configuration, databaseName))
@@ -125,6 +125,16 @@ public sealed class TenantDatabaseProvisioner : ITenantDatabaseProvisioner
             slug = "tenant";
         }
 
+        if (slug.Length > 72)
+        {
+            slug = slug[..72].Trim('-');
+        }
+
         return $"{slug}-{id.ToString("N")[..8]}";
+    }
+
+    private static string StorageRootFor(Tenant tenant)
+    {
+        return string.IsNullOrWhiteSpace(tenant.Slug) ? tenant.Id.ToString("N") : tenant.Slug;
     }
 }

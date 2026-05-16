@@ -3,6 +3,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using MetroBeezFMS.Application;
 using Microsoft.Extensions.Configuration;
+using System.Text.RegularExpressions;
 
 namespace MetroBeezFMS.Infrastructure.Services;
 
@@ -38,12 +39,12 @@ public sealed class S3FileStorageService : IFileStorageService
         _s3Client = new AmazonS3Client(config);
     }
 
-    public async Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantId, CancellationToken cancellationToken = default)
+    public async Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantStorageRoot, string? folder = null, CancellationToken cancellationToken = default)
     {
         var extension = Path.GetExtension(originalFileName);
         var safeExtension = string.IsNullOrWhiteSpace(extension) ? "" : extension.ToLowerInvariant();
         var fileName = $"{Guid.NewGuid():N}{safeExtension}";
-        var key = $"{TenantRootKey(tenantId)}{DateTime.UtcNow:yyyy/MM}/{fileName}";
+        var key = $"{TenantRootKey(tenantStorageRoot)}{NormalizeFolder(folder)}{DateTime.UtcNow:yyyy/MM}/{fileName}";
 
         var request = new PutObjectRequest
         {
@@ -63,22 +64,30 @@ public sealed class S3FileStorageService : IFileStorageService
         return new StoredFile(key, originalFileName, fileUrl, contentType, stream.CanSeek ? stream.Length : 0);
     }
 
-    public async Task EnsureTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    public async Task EnsureTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
-        var request = new PutObjectRequest
-        {
-            BucketName = _bucketName,
-            Key = TenantRootKey(tenantId),
-            ContentBody = string.Empty,
-            ContentType = "application/x-directory"
-        };
+        var tenantRootKey = TenantRootKey(tenantStorageRoot);
+        var folderKeys = new[] { tenantRootKey }
+            .Concat(TenantStorageFolders.DefaultFolders.Select(folder => $"{tenantRootKey}{NormalizeFolder(folder)}"))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        await _s3Client.PutObjectAsync(request, cancellationToken);
+        foreach (var key in folderKeys)
+        {
+            var request = new PutObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                ContentBody = string.Empty,
+                ContentType = "application/x-directory"
+            };
+
+            await _s3Client.PutObjectAsync(request, cancellationToken);
+        }
     }
 
-    public async Task DeleteTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    public async Task DeleteTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
-        var prefix = TenantRootKey(tenantId);
+        var prefix = TenantRootKey(tenantStorageRoot);
         string? continuationToken = null;
 
         do
@@ -109,11 +118,12 @@ public sealed class S3FileStorageService : IFileStorageService
         return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 
-    private string TenantRootKey(string tenantId)
+    private string TenantRootKey(string tenantStorageRoot)
     {
+        var safeTenantStorageRoot = NormalizeTenantStorageRoot(tenantStorageRoot);
         return string.IsNullOrWhiteSpace(_keyPrefix)
-            ? $"tenants/{tenantId}/"
-            : $"{_keyPrefix}/tenants/{tenantId}/";
+            ? $"tenants/{safeTenantStorageRoot}/"
+            : $"{_keyPrefix}/tenants/{safeTenantStorageRoot}/";
     }
 
     private string BuildPublicUrl(string key)
@@ -132,5 +142,28 @@ public sealed class S3FileStorageService : IFileStorageService
     private static string NormalizePrefix(string value)
     {
         return value.Trim().Trim('/');
+    }
+
+    private static string NormalizeTenantStorageRoot(string value)
+    {
+        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9._-]+", "-").Trim('-', '.', '_');
+        return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
+    }
+
+    private static string NormalizeFolder(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return string.Empty;
+        }
+
+        var segments = folder
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(segment => Regex.Replace(segment.ToLowerInvariant(), "[^a-z0-9._-]+", "-").Trim('-', '.', '_'))
+            .Where(segment => !string.IsNullOrWhiteSpace(segment));
+
+        var normalized = string.Join('/', segments);
+        return string.IsNullOrWhiteSpace(normalized) ? string.Empty : $"{normalized}/";
     }
 }

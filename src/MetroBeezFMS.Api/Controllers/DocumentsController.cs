@@ -14,15 +14,18 @@ public sealed class DocumentsController : ControllerBase
 {
     private readonly TenantDbContextFactory _tenantDbContextFactory;
     private readonly IFileStorageService _fileStorageService;
+    private readonly ITenantStoragePathResolver _tenantStoragePathResolver;
     private readonly ICurrentTenantService _currentTenant;
 
     public DocumentsController(
         TenantDbContextFactory tenantDbContextFactory,
         IFileStorageService fileStorageService,
+        ITenantStoragePathResolver tenantStoragePathResolver,
         ICurrentTenantService currentTenant)
     {
         _tenantDbContextFactory = tenantDbContextFactory;
         _fileStorageService = fileStorageService;
+        _tenantStoragePathResolver = tenantStoragePathResolver;
         _currentTenant = currentTenant;
     }
 
@@ -75,7 +78,14 @@ public sealed class DocumentsController : ControllerBase
         }
 
         await using var stream = file.OpenReadStream();
-        var storedFile = await _fileStorageService.SaveAsync(stream, file.FileName, file.ContentType, _currentTenant.TenantId.Value.ToString("N"), cancellationToken);
+        var tenantStorageRoot = await _tenantStoragePathResolver.GetStorageRootAsync(_currentTenant.TenantId.Value, cancellationToken);
+        var storedFile = await _fileStorageService.SaveAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            tenantStorageRoot,
+            TenantStorageFolders.ForEntity(entityType),
+            cancellationToken);
 
         await using var db = await _tenantDbContextFactory.CreateAsync(cancellationToken);
         var document = new DocumentAttachment

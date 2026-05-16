@@ -1,5 +1,6 @@
 using MetroBeezFMS.Application;
 using Microsoft.Extensions.Configuration;
+using System.Text.RegularExpressions;
 
 namespace MetroBeezFMS.Infrastructure.Services;
 
@@ -16,12 +17,17 @@ public sealed class LocalFileStorageService : IFileStorageService
         _publicBasePath = string.IsNullOrWhiteSpace(configuration["FileStorage:PublicBasePath"]) ? "/uploads" : configuration["FileStorage:PublicBasePath"]!;
     }
 
-    public async Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantId, CancellationToken cancellationToken = default)
+    public async Task<StoredFile> SaveAsync(Stream stream, string originalFileName, string? contentType, string tenantStorageRoot, string? folder = null, CancellationToken cancellationToken = default)
     {
         var extension = Path.GetExtension(originalFileName);
         var safeExtension = string.IsNullOrWhiteSpace(extension) ? "" : extension.ToLowerInvariant();
         var fileName = $"{Guid.NewGuid():N}{safeExtension}";
-        var relativeFolder = Path.Combine(tenantId, DateTime.UtcNow.ToString("yyyy"), DateTime.UtcNow.ToString("MM"));
+        var safeTenantStorageRoot = NormalizeTenantStorageRoot(tenantStorageRoot);
+        var relativeFolder = Path.Combine(
+            new[] { safeTenantStorageRoot }
+                .Concat(NormalizeFolderSegments(folder))
+                .Concat([DateTime.UtcNow.ToString("yyyy"), DateTime.UtcNow.ToString("MM")])
+                .ToArray());
         var absoluteFolder = Path.Combine(_storageRoot, relativeFolder);
         Directory.CreateDirectory(absoluteFolder);
 
@@ -36,15 +42,25 @@ public sealed class LocalFileStorageService : IFileStorageService
         return new StoredFile(fileName, originalFileName, publicPath, contentType, fileInfo.Length);
     }
 
-    public Task EnsureTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    public Task EnsureTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(Path.Combine(_storageRoot, tenantId));
+        var safeTenantStorageRoot = NormalizeTenantStorageRoot(tenantStorageRoot);
+        Directory.CreateDirectory(Path.Combine(_storageRoot, safeTenantStorageRoot));
+        foreach (var folder in TenantStorageFolders.DefaultFolders)
+        {
+            Directory.CreateDirectory(Path.Combine(
+                new[] { _storageRoot, safeTenantStorageRoot }
+                    .Concat(NormalizeFolderSegments(folder))
+                    .ToArray()));
+        }
+
         return Task.CompletedTask;
     }
 
-    public Task DeleteTenantRootAsync(string tenantId, CancellationToken cancellationToken = default)
+    public Task DeleteTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
     {
-        var tenantPath = Path.GetFullPath(Path.Combine(_storageRoot, tenantId));
+        var safeTenantStorageRoot = NormalizeTenantStorageRoot(tenantStorageRoot);
+        var tenantPath = Path.GetFullPath(Path.Combine(_storageRoot, safeTenantStorageRoot));
         var storageRoot = Path.GetFullPath(_storageRoot);
         if (!tenantPath.StartsWith(storageRoot, StringComparison.OrdinalIgnoreCase))
         {
@@ -57,5 +73,25 @@ public sealed class LocalFileStorageService : IFileStorageService
         }
 
         return Task.CompletedTask;
+    }
+
+    private static string NormalizeTenantStorageRoot(string value)
+    {
+        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9._-]+", "-").Trim('-', '.', '_');
+        return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
+    }
+
+    private static IEnumerable<string> NormalizeFolderSegments(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return [];
+        }
+
+        return folder
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(segment => Regex.Replace(segment.ToLowerInvariant(), "[^a-z0-9._-]+", "-").Trim('-', '.', '_'))
+            .Where(segment => !string.IsNullOrWhiteSpace(segment));
     }
 }
