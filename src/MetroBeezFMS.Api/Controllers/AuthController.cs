@@ -64,22 +64,27 @@ public sealed class AuthController : ControllerBase
             return ValidationProblem(string.Join("; ", result.Errors.Select(x => x.Description)));
         }
 
-        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var frontendUrl = _configuration["FRONTEND_URL"] ?? _configuration["Frontend:Url"] ?? "http://localhost:5173";
-        var verifyUrl = $"{frontendUrl.TrimEnd('/')}/verify-email?email={Uri.EscapeDataString(user.Email!)}&token={Uri.EscapeDataString(encodedToken)}";
-
-        await _emailService.SendAsync(
-            user.Email!,
-            "BeezFleet - Verify Your Email",
-            $"""
-            <p>Welcome to BeezFleet, {user.FullName}.</p>
-            <p>Verify your email before we create your tenant database.</p>
-            <p><a href="{verifyUrl}">Verify email</a></p>
-            """,
-            cancellationToken);
+        await SendVerificationEmailAsync(user, cancellationToken);
 
         return Accepted(new { message = "Registration created. Verify your email to continue tenant onboarding." });
+    }
+
+    [HttpPost("resend-verification")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return ValidationProblem("Email is required.");
+        }
+
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is not null && !user.EmailConfirmed)
+        {
+            await SendVerificationEmailAsync(user, cancellationToken);
+        }
+
+        return Accepted(new { message = "If the account needs verification, a new verification email has been sent." });
     }
 
     [HttpPost("verify-email")]
@@ -280,6 +285,26 @@ public sealed class AuthController : ControllerBase
             tenant.Name,
             requiresEmailVerification,
             requiresOnboarding));
+    }
+
+    private async Task SendVerificationEmailAsync(AppUser user, CancellationToken cancellationToken)
+    {
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+        var frontendUrl = _configuration["FRONTEND_URL"] ?? _configuration["Frontend:Url"] ?? "http://localhost:5173";
+        var verifyUrl = $"{frontendUrl.TrimEnd('/')}/verify-email?email={Uri.EscapeDataString(user.Email!)}&token={Uri.EscapeDataString(encodedToken)}";
+
+        await _emailService.SendAsync(
+            user.Email!,
+            "BeezFleet - Verify Your Email",
+            $"""
+            <p>Welcome to BeezFleet, {user.FullName}.</p>
+            <p>Verify your email before we create your tenant database.</p>
+            <p><a href="{verifyUrl}">Verify email</a></p>
+            <p>If the button does not work, copy and paste this link into your browser:</p>
+            <p>{verifyUrl}</p>
+            """,
+            cancellationToken);
     }
 
     private ActionResult<AuthResponse> BuildPlatformAuthResponse(AppUser user)

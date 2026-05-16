@@ -2082,7 +2082,9 @@ function RegisterPage({ showToast }: { showToast: (toast: Toast) => void }) {
 function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: AuthResponse) => void; showToast: (toast: Toast) => void }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const [email, setEmail] = useState(searchParams.get('email') ?? '')
   const [submitting, setSubmitting] = useState(false)
+  const [resending, setResending] = useState(false)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitting(true)
@@ -2102,15 +2104,33 @@ function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (aut
       setSubmitting(false)
     }
   }
-  const email = searchParams.get('email') ?? ''
+
+  const resend = async () => {
+    if (!email.trim()) {
+      showToast({ title: 'Email required', detail: 'Enter the email address that needs verification.' })
+      return
+    }
+
+    setResending(true)
+    try {
+      await postJson('/api/auth/resend-verification', { email })
+      showToast({ title: 'Verification email sent', detail: 'Check the inbox and spam folder for the newest BeezFleet email.' })
+    } catch (error) {
+      showToast({ title: 'Verification email not sent', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setResending(false)
+    }
+  }
+
   const token = searchParams.get('token') ?? ''
   return (
     <AuthShell title="Verify email" subtitle="BeezFleet">
       <form className="auth-form" onSubmit={submit}>
-        <Field label="Email" name="email" type="email" defaultValue={email} required />
+        <label className="field"><span>Email</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
         <Field label="Verification token" name="token" defaultValue={token} required />
         <Field label="Company name" name="companyName" required />
         <button className="primary-button full" type="submit" disabled={submitting}><CheckCircle2 size={18} /> {submitting ? 'Verifying...' : 'Verify email'}</button>
+        <button className="secondary-button full" type="button" disabled={resending} onClick={resend}><MailCheck size={18} /> {resending ? 'Sending...' : 'Resend verification email'}</button>
       </form>
     </AuthShell>
   )

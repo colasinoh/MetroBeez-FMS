@@ -5,6 +5,7 @@ namespace MetroBeezFMS.Application;
 public sealed record RegisterRequest(string FullName, string Email, string Password);
 public sealed record VerifyEmailRequest(string Email, string Token, string CompanyName);
 public sealed record LoginRequest(string Email, string Password);
+public sealed record ResendVerificationRequest(string Email);
 public sealed record ForgotPasswordRequest(string Email);
 public sealed record ResetPasswordRequest(string Email, string Token, string NewPassword);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);

@@ -47,6 +47,9 @@ public sealed class EmailService : IEmailService
             _logger.LogError("SendGrid returned {StatusCode} for {Email}: {Body}", response.StatusCode, toEmail, body);
             throw new InvalidOperationException($"SendGrid returned {response.StatusCode}. Confirm the API key is valid and SENDGRID_FROM_EMAIL is a verified sender.");
         }
+
+        response.Headers.TryGetValues("X-Message-Id", out var messageIds);
+        _logger.LogInformation("SendGrid accepted email to {Email}. Subject: {Subject}. MessageId: {MessageId}", toEmail, subject, messageIds?.FirstOrDefault() ?? "n/a");
     }
 
     private static string StripHtml(string html)
