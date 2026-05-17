@@ -25,6 +25,9 @@ public static class TenantStorageFolders
 {
     public const string Photos = "photos";
     public const string ProfilePhotos = "photos/profile";
+    public const string VehiclePhotos = "photos/vehicles";
+    public const string DriverPhotos = "photos/drivers";
+    public const string PublicAssets = "public";
     public const string Renters = "renters";
     public const string Vehicles = "vehicles";
     public const string Drivers = "drivers";
@@ -42,6 +45,9 @@ public static class TenantStorageFolders
     [
         Photos,
         ProfilePhotos,
+        VehiclePhotos,
+        DriverPhotos,
+        PublicAssets,
         Renters,
         Vehicles,
         Drivers,

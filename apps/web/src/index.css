@@ -39,7 +39,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -176,6 +177,7 @@ a {
 .search-box input,
 .field input,
 .field select,
+.field textarea,
 .select-filter select {
   width: 100%;
   border: 0;
@@ -814,7 +816,8 @@ tr:last-child td {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -822,6 +825,12 @@ tr:last-child td {
   background: var(--white);
   color: var(--ink);
   font-weight: 500;
+}
+
+.field textarea {
+  min-height: 92px;
+  padding: 10px 11px;
+  resize: vertical;
 }
 
 .form-panel {
@@ -909,6 +918,463 @@ tr:last-child td {
   min-height: 170px;
   padding: 24px;
   color: var(--muted);
+  text-align: center;
+}
+
+.muted-line,
+.warning-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.warning-line {
+  color: var(--orange);
+}
+
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.toggle-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+}
+
+.form-toggle {
+  align-self: end;
+  min-height: 40px;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.photo-card {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+
+.photo-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  background: #e9eef6;
+  color: var(--muted);
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.photo-name {
+  overflow: hidden;
+  color: var(--blue);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-field {
+  gap: 5px;
+  font-size: 12px;
+}
+
+.compact-field input {
+  min-height: 34px;
+}
+
+.photo-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 10px;
+  align-items: end;
+}
+
+.photo-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.public-settings-panel {
+  max-width: none;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+
+.public-manager-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.public-listing-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+
+.public-listing-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.public-listing-card h2,
+.public-settings-panel h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.public-listing-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.public-photo-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.public-photo-choice {
+  display: grid;
+  gap: 7px;
+  width: 132px;
+  flex: 0 0 132px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.public-photo-choice > span {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #edf2f8;
+}
+
+.public-photo-choice img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.public-photo-choice input {
+  justify-self: start;
+  accent-color: var(--gold);
+}
+
+.feature-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.feature-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feature-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.feature-check-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.feature-check-grid input {
+  accent-color: var(--gold);
+}
+
+.public-page {
+  min-height: 100svh;
+  padding: 22px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.public-page.theme-dark {
+  background: #0b111c;
+  color: #d7dde8;
+}
+
+.public-page.theme-light {
+  background: #f7f8fb;
+  color: #182032;
+}
+
+.public-page a {
+  text-decoration: none;
+}
+
+.public-header,
+.public-intro,
+.public-vehicle-grid,
+.public-booking-panel,
+.public-empty {
+  width: min(1120px, 100%);
+  margin-inline: auto;
+}
+
+.public-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+}
+
+.public-brand {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.public-theme-toggle,
+.public-select-button,
+.public-submit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border-radius: var(--radius);
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.public-theme-toggle {
+  padding: 0 11px;
+  opacity: 0.82;
+}
+
+.public-intro {
+  display: grid;
+  gap: 8px;
+  padding: 58px 0 26px;
+}
+
+.public-intro p,
+.public-empty h1,
+.public-empty h2,
+.public-booking-panel h2,
+.public-vehicle-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.public-intro span,
+.public-empty p,
+.public-booking-panel p,
+.public-vehicle-body p,
+.public-vehicle-body small {
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  line-height: 1.55;
+}
+
+.public-intro span {
+  max-width: 680px;
+}
+
+.public-vehicle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 16px;
+}
+
+.public-vehicle-card,
+.public-booking-panel,
+.public-empty {
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.public-vehicle-card {
+  overflow: hidden;
+}
+
+.public-vehicle-photo {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.public-vehicle-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.public-vehicle-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.public-vehicle-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.public-vehicle-title h2 {
+  font-size: 16px;
+}
+
+.public-vehicle-title span {
+  flex: 0 0 auto;
+  color: var(--gold);
+  font-size: 13px;
+}
+
+.public-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.public-features span {
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: color-mix(in srgb, currentColor 80%, transparent);
+  font-size: 12px;
+}
+
+.public-select-button,
+.public-submit-button {
+  border-color: color-mix(in srgb, currentColor 18%, transparent);
+  padding: 0 12px;
+}
+
+.public-select-button:hover,
+.public-submit-button:hover,
+.public-theme-toggle:hover {
+  border-color: var(--gold);
+}
+
+.public-booking-panel {
+  display: grid;
+  grid-template-columns: 0.75fr 1.25fr;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.public-booking-panel h2 {
+  font-size: 18px;
+}
+
+.public-booking-panel form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.public-booking-panel label {
+  display: grid;
+  gap: 6px;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.public-booking-panel input,
+.public-booking-panel select,
+.public-booking-panel textarea {
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  outline: 0;
+}
+
+.public-booking-panel textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.public-booking-panel option {
+  color: #172033;
+}
+
+.public-form-wide,
+.public-submit-button {
+  grid-column: 1 / -1;
+}
+
+.public-submit-button {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--blue);
+}
+
+.public-empty {
+  display: grid;
+  gap: 8px;
+  min-height: 220px;
+  place-items: center;
+  padding: 28px;
   text-align: center;
 }
 
@@ -1054,7 +1520,8 @@ tr:last-child td {
   .two-column,
   .card-grid,
   .calendar-strip,
-  .form-grid {
+  .form-grid,
+  .public-booking-panel {
     grid-template-columns: 1fr;
   }
 }
@@ -1084,5 +1551,25 @@ tr:last-child td {
 
   .bar-row strong {
     grid-column: 1 / -1;
+  }
+
+  .public-page {
+    padding: 16px;
+  }
+
+  .public-intro {
+    padding-top: 32px;
+  }
+
+  .public-booking-panel form {
+    grid-template-columns: 1fr;
+  }
+
+  .photo-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .public-listing-card > header {
+    flex-direction: column;
   }
 }

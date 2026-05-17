@@ -21,6 +21,10 @@ public sealed class TenantDbContext : DbContext
     public DbSet<VehicleViolation> VehicleViolations => Set<VehicleViolation>();
     public DbSet<VehicleIncident> VehicleIncidents => Set<VehicleIncident>();
     public DbSet<DocumentAttachment> DocumentAttachments => Set<DocumentAttachment>();
+    public DbSet<VehicleFeatureDefinition> VehicleFeatureDefinitions => Set<VehicleFeatureDefinition>();
+    public DbSet<PublicVehicleListing> PublicVehicleListings => Set<PublicVehicleListing>();
+    public DbSet<PublicVehicleFeature> PublicVehicleFeatures => Set<PublicVehicleFeature>();
+    public DbSet<PublicBookingInquiry> PublicBookingInquiries => Set<PublicBookingInquiry>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
@@ -33,6 +37,8 @@ public sealed class TenantDbContext : DbContext
             entity.ToTable("CompanyProfiles");
             entity.Property(x => x.CompanyName).HasMaxLength(220).IsRequired();
             entity.Property(x => x.ContactNumber).HasMaxLength(80);
+            entity.Property(x => x.PublicPageHeadline).HasMaxLength(180);
+            entity.Property(x => x.PublicBookingInstructions).HasMaxLength(600);
         });
 
         builder.Entity<Vehicle>(entity =>
@@ -137,6 +143,59 @@ public sealed class TenantDbContext : DbContext
             entity.Property(x => x.FileName).HasMaxLength(260).IsRequired();
             entity.Property(x => x.OriginalFileName).HasMaxLength(260).IsRequired();
             entity.Property(x => x.DocumentType).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Caption).HasMaxLength(220);
+            entity.HasIndex(x => new { x.EntityType, x.EntityId, x.IsPhoto });
+        });
+
+        builder.Entity<VehicleFeatureDefinition>(entity =>
+        {
+            entity.ToTable("VehicleFeatureDefinitions");
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Icon).HasMaxLength(24).IsRequired();
+        });
+
+        builder.Entity<PublicVehicleListing>(entity =>
+        {
+            entity.ToTable("PublicVehicleListings");
+            entity.HasIndex(x => x.VehicleId).IsUnique();
+            entity.Property(x => x.PriceAmount).HasPrecision(14, 2);
+            entity.Property(x => x.PriceUnit).HasMaxLength(40);
+            entity.Property(x => x.Description).HasMaxLength(1400);
+            entity.Property(x => x.RentalNotes).HasMaxLength(1000);
+            entity.HasOne(x => x.Vehicle)
+                .WithOne(x => x.PublicListing)
+                .HasForeignKey<PublicVehicleListing>(x => x.VehicleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<PublicVehicleFeature>(entity =>
+        {
+            entity.ToTable("PublicVehicleFeatures");
+            entity.Property(x => x.CustomLabel).HasMaxLength(120);
+            entity.Property(x => x.CustomIcon).HasMaxLength(24);
+            entity.HasOne(x => x.PublicVehicleListing)
+                .WithMany(x => x.Features)
+                .HasForeignKey(x => x.PublicVehicleListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.FeatureDefinition)
+                .WithMany(x => x.PublicVehicleFeatures)
+                .HasForeignKey(x => x.FeatureDefinitionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<PublicBookingInquiry>(entity =>
+        {
+            entity.ToTable("PublicBookingInquiries");
+            entity.Property(x => x.RenterName).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.ContactNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(220);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Vehicle)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<Notification>(entity =>
@@ -207,6 +266,7 @@ public sealed class TenantDbContext : DbContext
         ConfigureSoftDelete<VehicleViolation>(builder);
         ConfigureSoftDelete<VehicleIncident>(builder);
         ConfigureSoftDelete<DocumentAttachment>(builder);
+        ConfigureSoftDelete<PublicVehicleListing>(builder);
     }
 
     private static void ConfigureSoftDelete<TEntity>(ModelBuilder builder)

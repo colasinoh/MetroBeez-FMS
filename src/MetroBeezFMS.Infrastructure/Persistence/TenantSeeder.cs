@@ -5,6 +5,20 @@ namespace MetroBeezFMS.Infrastructure.Persistence;
 
 public static class TenantSeeder
 {
+    private static readonly (string Code, string Label, string Icon, int SortOrder)[] PublicVehicleFeatures =
+    [
+        ("aircon", "Air conditioning", "❄️", 10),
+        ("automatic", "Automatic transmission", "⚙️", 20),
+        ("manual", "Manual transmission", "🕹️", 30),
+        ("driver", "Driver available", "🧑", 40),
+        ("self_drive", "Self-drive ready", "🗝️", 50),
+        ("fuel_efficient", "Fuel efficient", "⛽", 60),
+        ("large_luggage", "Large luggage space", "🧳", 70),
+        ("bluetooth", "Bluetooth audio", "🎵", 80),
+        ("dashcam", "Dashcam", "📷", 90),
+        ("delivery", "Delivery/logistics", "📦", 100)
+    ];
+
     public static async Task SeedAsync(TenantDbContext dbContext, Guid tenantId, Guid ownerUserId, string companyName, CancellationToken cancellationToken = default)
     {
         if (await dbContext.CompanyProfiles.AnyAsync(cancellationToken))
@@ -15,6 +29,7 @@ public static class TenantSeeder
         var now = DateTimeOffset.UtcNow;
         var vehicleA = new Vehicle
         {
+            Id = Guid.Parse("11111111-1111-4111-8111-111111111111"),
             PlateNumber = "MBZ-1024",
             Make = "Toyota",
             Model = "Innova",
@@ -33,6 +48,7 @@ public static class TenantSeeder
         };
         var vehicleB = new Vehicle
         {
+            Id = Guid.Parse("22222222-2222-4222-8222-222222222222"),
             PlateNumber = "MBZ-2048",
             Make = "Mitsubishi",
             Model = "L300",
@@ -52,6 +68,7 @@ public static class TenantSeeder
 
         var driverA = new Driver
         {
+            Id = Guid.Parse("33333333-3333-4333-8333-333333333333"),
             FullName = "Miguel Santos",
             ContactNumber = "+63 917 555 0142",
             Email = "miguel.driver@example.com",
@@ -64,6 +81,7 @@ public static class TenantSeeder
         };
         var driverB = new Driver
         {
+            Id = Guid.Parse("44444444-4444-4444-8444-444444444444"),
             FullName = "Carlo Reyes",
             ContactNumber = "+63 918 555 0199",
             Email = "carlo.driver@example.com",
@@ -77,6 +95,7 @@ public static class TenantSeeder
 
         var renterA = new Renter
         {
+            Id = Guid.Parse("55555555-5555-4555-8555-555555555555"),
             FullName = "Alyssa Cruz",
             ContactNumber = "+63 919 555 0101",
             Email = "alyssa@example.com",
@@ -86,6 +105,7 @@ public static class TenantSeeder
         };
         var renterB = new Renter
         {
+            Id = Guid.Parse("66666666-6666-4666-8666-666666666666"),
             FullName = "Northstar Trading Corp.",
             ContactNumber = "+63 2 8555 0188",
             Email = "operations@northstar.example",
@@ -95,6 +115,7 @@ public static class TenantSeeder
         };
         var renterC = new Renter
         {
+            Id = Guid.Parse("77777777-7777-4777-8777-777777777777"),
             FullName = "Jose Villanueva",
             ContactNumber = "+63 920 555 0133",
             Email = "jose@example.com",
@@ -105,6 +126,7 @@ public static class TenantSeeder
 
         var bookingA = new Booking
         {
+            Id = Guid.Parse("88888888-8888-4888-8888-888888888888"),
             ReferenceNumber = "BK-2026-0001",
             Vehicle = vehicleA,
             Renter = renterA,
@@ -122,6 +144,7 @@ public static class TenantSeeder
         };
         var bookingB = new Booking
         {
+            Id = Guid.Parse("99999999-9999-4999-8999-999999999999"),
             ReferenceNumber = "BK-2026-0002",
             Vehicle = vehicleB,
             Renter = renterB,
@@ -139,6 +162,7 @@ public static class TenantSeeder
         };
         var bookingC = new Booking
         {
+            Id = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
             ReferenceNumber = "BK-2026-0003",
             Vehicle = vehicleA,
             Renter = renterC,
@@ -156,6 +180,7 @@ public static class TenantSeeder
 
         var tripA = new Trip
         {
+            Id = Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
             TripNumber = "TR-2026-0001",
             Booking = bookingB,
             BookingReference = bookingB.ReferenceNumber,
@@ -180,6 +205,7 @@ public static class TenantSeeder
 
         var tripB = new Trip
         {
+            Id = Guid.Parse("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
             TripNumber = "TR-2026-0002",
             Vehicle = vehicleA,
             Driver = driverA,
@@ -203,6 +229,7 @@ public static class TenantSeeder
 
         var tripC = new Trip
         {
+            Id = Guid.Parse("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
             TripNumber = "TR-2026-0003",
             Booking = bookingA,
             BookingReference = bookingA.ReferenceNumber,
@@ -246,6 +273,18 @@ public static class TenantSeeder
             ContactNumber = "+63 2 8555 0100"
         });
         dbContext.AddRange(vehicleA, vehicleB, driverA, driverB, renterA, renterB, renterC, bookingA, bookingB, bookingC, tripA, tripB, tripC, pmsA, pmsB);
+        foreach (var feature in PublicVehicleFeatures)
+        {
+            dbContext.VehicleFeatureDefinitions.Add(new VehicleFeatureDefinition
+            {
+                Code = feature.Code,
+                Label = feature.Label,
+                Icon = feature.Icon,
+                SortOrder = feature.SortOrder,
+                IsActive = true
+            });
+        }
+
         dbContext.Notifications.Add(new Notification
         {
             TenantId = tenantId,

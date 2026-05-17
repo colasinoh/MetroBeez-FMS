@@ -10,11 +10,20 @@ public static class ControllerMapping
         return new VehicleListDto(
             vehicle.Id,
             vehicle.PlateNumber,
+            vehicle.MvFileNumber,
+            vehicle.EngineNumber,
+            vehicle.ChassisVinNumber,
             vehicle.Make,
             vehicle.Model,
+            vehicle.SeriesVariant,
             vehicle.YearModel,
             vehicle.Color,
+            vehicle.VehicleType,
+            vehicle.BodyType,
             vehicle.FuelType,
+            vehicle.PassengerCapacity,
+            vehicle.Classification,
+            vehicle.GrossWeight,
             vehicle.CurrentOdometer,
             vehicle.OwnershipStatus,
             vehicle.Status,
@@ -26,9 +35,12 @@ public static class ControllerMapping
         return new DriverListDto(
             driver.Id,
             driver.FullName,
+            driver.Address,
             driver.ContactNumber,
             driver.Email,
+            driver.EmergencyContact,
             driver.LicenseNumber,
+            driver.LicenseTypeRestrictions,
             driver.LicenseExpirationDate,
             driver.Status,
             driver.Notes);
@@ -109,7 +121,11 @@ public static class ControllerMapping
             document.FileSize,
             document.DocumentType,
             document.ExpirationDate,
-            document.UploadedAt);
+            document.UploadedAt,
+            document.IsPhoto,
+            document.IsPublic,
+            document.Caption,
+            document.DisplayOrder);
     }
 
     public static NotificationDto ToDto(this Notification notification)

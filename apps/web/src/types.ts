@@ -115,11 +115,114 @@ export type DocumentAttachment = {
   id: string
   entityType: string
   entityId: string
+  fileName?: string
   originalFileName: string
   fileUrl: string
+  contentType?: string
+  fileSize?: number
   documentType: string
   expirationDate?: string
   uploadedAt: string
+  isPhoto?: boolean
+  isPublic?: boolean
+  caption?: string
+  displayOrder?: number
+}
+
+export type PhotoItem = {
+  id: string
+  entityType: string
+  entityId: string
+  originalFileName: string
+  fileUrl: string
+  displayUrl?: string
+  contentType?: string
+  fileSize: number
+  isPublic: boolean
+  caption?: string
+  displayOrder: number
+  uploadedAt: string
+}
+
+export type VehicleFeatureDefinition = {
+  id: string
+  code: string
+  label: string
+  icon: string
+  sortOrder: number
+}
+
+export type PublicVehicleFeature = {
+  featureDefinitionId?: string | null
+  label: string
+  icon: string
+  isCustom: boolean
+  displayOrder: number
+}
+
+export type PublicPageSettings = {
+  enabled: boolean
+  slug?: string
+  publicUrl?: string
+  companyName: string
+  headline?: string
+  description?: string
+  bookingInstructions?: string
+}
+
+export type PublicVehicleListing = {
+  id?: string | null
+  vehicleId: string
+  vehicleLabel: string
+  status: string
+  photoCount: number
+  publicPhotoCount: number
+  isPublished: boolean
+  priceAmount?: number | null
+  priceUnit?: string | null
+  description?: string | null
+  rentalNotes?: string | null
+  showPlateNumber: boolean
+  displayOrder: number
+  photos: PhotoItem[]
+  features: PublicVehicleFeature[]
+}
+
+export type PublicPageManagement = {
+  settings: PublicPageSettings
+  featureDefinitions: VehicleFeatureDefinition[]
+  vehicles: PublicVehicleListing[]
+}
+
+export type PublicTenantPhoto = {
+  id: string
+  displayUrl?: string
+  caption?: string
+  displayOrder: number
+}
+
+export type PublicTenantVehicle = {
+  vehicleId: string
+  vehicleLabel: string
+  plateNumber?: string
+  vehicleType?: string
+  fuelType?: string
+  passengerCapacity: number
+  priceAmount?: number | null
+  priceUnit?: string | null
+  description?: string | null
+  rentalNotes?: string | null
+  photos: PublicTenantPhoto[]
+  features: PublicVehicleFeature[]
+}
+
+export type PublicTenantPage = {
+  companyName: string
+  slug: string
+  headline?: string
+  description?: string
+  bookingInstructions?: string
+  vehicles: PublicTenantVehicle[]
 }
 
 export type NotificationItem = {

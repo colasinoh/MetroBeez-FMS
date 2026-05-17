@@ -15,18 +15,22 @@ import {
   FileText,
   Filter,
   Fuel,
+  Globe2,
   History,
+  Images,
   KeyRound,
   LayoutDashboard,
   LogOut,
   MailCheck,
   Menu,
+  Moon,
   Plus,
   Route as RouteIcon,
   Save,
   Search,
   Settings as SettingsIcon,
   ShieldCheck,
+  Sun,
   Trash2,
   Upload,
   UserRound,
@@ -65,6 +69,11 @@ import type {
   Driver,
   MaintenanceSchedule,
   NotificationItem,
+  PhotoItem,
+  PublicPageManagement,
+  PublicTenantPage,
+  PublicTenantVehicle,
+  PublicVehicleListing,
   Renter,
   Trip,
   TripStatus,
@@ -88,6 +97,7 @@ const tenantNavItems = [
   { to: '/trips', label: 'Trips', icon: RouteIcon },
   { to: '/maintenance', label: 'PMS', icon: Wrench },
   { to: '/documents', label: 'Documents', icon: FileText },
+  { to: '/public-page', label: 'Public Page', icon: Globe2 },
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -199,6 +209,43 @@ type LockedDocumentEntity = {
   entityType: string
   entityId: string
   label: string
+}
+
+type VehicleApiDto = {
+  id: string
+  plateNumber: string
+  mvFileNumber?: string | null
+  engineNumber?: string | null
+  chassisVinNumber?: string | null
+  make: string
+  model: string
+  seriesVariant?: string | null
+  yearModel: number
+  color?: string | null
+  vehicleType?: string | null
+  bodyType?: string | null
+  fuelType?: string | null
+  passengerCapacity: number
+  classification?: string | null
+  grossWeight?: number | null
+  currentOdometer: number
+  ownershipStatus: Vehicle['ownershipStatus']
+  status: VehicleStatus
+  remarks?: string | null
+}
+
+type DriverApiDto = {
+  id: string
+  fullName: string
+  address?: string | null
+  contactNumber?: string | null
+  email?: string | null
+  emergencyContact?: string | null
+  licenseNumber?: string | null
+  licenseTypeRestrictions?: string | null
+  licenseExpirationDate?: string | null
+  status: Driver['status']
+  notes?: string | null
 }
 
 const authStorageKey = 'metrobeez.auth'
@@ -357,6 +404,33 @@ async function uploadDocumentFromForm(form: FormData, session: AuthSession | nul
   return postForm<DocumentAttachment>('/api/documents/upload', upload, session.token)
 }
 
+async function uploadPhotoFromForm(form: FormData, session: AuthSession | null) {
+  if (!session?.token) {
+    throw new Error('Please sign in again before uploading photos.')
+  }
+
+  const file = form.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error('Choose an image file to upload.')
+  }
+
+  const entityType = formString(form, 'entityType')
+  const entityId = formString(form, 'entityId')
+  if (!entityType || !entityId) {
+    throw new Error('Choose a related vehicle or driver before uploading.')
+  }
+
+  const upload = new FormData()
+  upload.append('file', file)
+  upload.append('entityType', entityType)
+  upload.append('entityId', entityId)
+  upload.append('caption', formString(form, 'caption'))
+  upload.append('isPublic', form.get('isPublic') === 'on' ? 'true' : 'false')
+  upload.append('displayOrder', formString(form, 'displayOrder', '0'))
+
+  return postForm<PhotoItem>('/api/photos/upload', upload, session.token)
+}
+
 const initialAuditEntries: AuditEntry[] = [
   {
     id: 'audit-trip-1',
@@ -445,6 +519,29 @@ function App() {
       active = false
     }
   }, [session?.token, session?.userId])
+  useEffect(() => {
+    if (!session?.token || session.role === 'SuperAdmin') {
+      return
+    }
+
+    let active = true
+    Promise.all([
+      getJson<VehicleApiDto[]>('/api/vehicles', session.token),
+      getJson<DriverApiDto[]>('/api/drivers', session.token),
+    ])
+      .then(([apiVehicles, apiDrivers]) => {
+        if (!active) return
+        setVehicles(apiVehicles.map(vehicleFromApi))
+        setDrivers(apiDrivers.map(driverFromApi))
+      })
+      .catch(() => {
+        // Keep the local demo records available if the API is offline during development.
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.role])
   useEffect(() => {
     let active = true
     const email = userProfile.email || session?.email
@@ -560,6 +657,10 @@ function App() {
             element={<DocumentsPage documents={documents} setDocuments={setDocuments} data={data} session={session} showToast={showToast} />}
           />
           <Route
+            path="/public-page"
+            element={<PublicPageManagementPage session={session} showToast={showToast} />}
+          />
+          <Route
             path="/notifications"
             element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} />}
           />
@@ -569,6 +670,7 @@ function App() {
             element={<SettingsPage company={company} setCompany={setCompany} session={session} setSession={setSession} userProfile={userProfile} clientGravatarUrl={clientGravatarUrl} setUserProfile={setUserProfile} showToast={showToast} />}
           />
         </Route>
+        <Route path="/:tenantSlug" element={<TenantPublicPage showToast={showToast} />} />
       </Routes>
       {toast && <ToastMessage toast={toast} />}
     </>
@@ -1012,6 +1114,13 @@ function VehicleDetailsPage({
           ['Remarks', vehicle.remarks],
         ]}
       />
+      <EntityPhotosPanel
+        entityType="Vehicle"
+        entityId={vehicle.id}
+        entityLabel={vehicleLabel(data, vehicle.id)}
+        session={session}
+        showToast={showToast}
+      />
       <TwoColumn>
         <Panel title="Trip history">
           <CompactList>
@@ -1147,6 +1256,13 @@ function DriverDetailsPage({
         ['License expires', dateText(driver.licenseExpirationDate)],
         ['Notes', driver.notes],
       ]} />
+      <EntityPhotosPanel
+        entityType="Driver"
+        entityId={driver.id}
+        entityLabel={driver.fullName}
+        session={session}
+        showToast={showToast}
+      />
       <TwoColumn>
         <Panel title="Assigned trips">
           <CompactList>
@@ -1829,6 +1945,372 @@ function DocumentsPage({
         <DocumentForm data={data} onSubmit={addDocument} submitLabel={uploading ? 'Uploading...' : 'Upload document'} />
       </Modal>
     </Page>
+  )
+}
+
+function PublicPageManagementPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
+  const [model, setModel] = useState<PublicPageManagement | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!session?.token) {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<PublicPageManagement>('/api/public-page', session.token)
+      .then((result) => {
+        if (active) {
+          setModel(result)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Public page not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token])
+
+  if (!session?.token) {
+    return <Navigate to="/login" replace />
+  }
+
+  const updateSettings = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!model) return
+
+    const form = new FormData(event.currentTarget)
+    try {
+      const settings = await putJson<PublicPageManagement['settings']>('/api/public-page/settings', {
+        enabled: form.get('enabled') === 'on',
+        headline: formString(form, 'headline') || null,
+        description: formString(form, 'description') || null,
+        bookingInstructions: formString(form, 'bookingInstructions') || null,
+      }, session.token)
+      setModel((current) => current ? { ...current, settings } : current)
+      showToast({ title: 'Public page saved', detail: settings.enabled ? 'Your tenant page is enabled.' : 'Your tenant page is disabled.' })
+    } catch (error) {
+      showToast({ title: 'Public page not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const updatePhotoVisibility = async (listing: PublicVehicleListing, photo: PhotoItem, isPublic: boolean) => {
+    try {
+      const updated = await putJson<PhotoItem>(`/api/photos/${photo.id}`, {
+        isPublic,
+        caption: photo.caption || null,
+        displayOrder: photo.displayOrder,
+      }, session.token)
+
+      setModel((current) => current ? {
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.vehicleId === listing.vehicleId
+          ? {
+              ...vehicle,
+              photos: vehicle.photos.map((item) => item.id === photo.id ? updated : item),
+              publicPhotoCount: vehicle.photos.map((item) => item.id === photo.id ? updated : item).filter((item) => item.isPublic).length,
+            }
+          : vehicle),
+      } : current)
+    } catch (error) {
+      showToast({ title: 'Photo setting not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const saveListing = async (listing: PublicVehicleListing, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const priceRaw = formString(form, 'priceAmount')
+    const featureDefinitionIds = form.getAll('featureDefinitionIds').map(String).filter(Boolean)
+    const customFeatures = parseCustomFeatures(formString(form, 'customFeatures'))
+
+    try {
+      const updated = await putJson<PublicVehicleListing>(`/api/public-page/vehicles/${listing.vehicleId}`, {
+        isPublished: form.get('isPublished') === 'on',
+        priceAmount: priceRaw ? Number(priceRaw) : null,
+        priceUnit: formString(form, 'priceUnit', 'per day'),
+        description: formString(form, 'description') || null,
+        rentalNotes: formString(form, 'rentalNotes') || null,
+        showPlateNumber: form.get('showPlateNumber') === 'on',
+        displayOrder: formNumber(form, 'displayOrder', listing.displayOrder),
+        featureDefinitionIds,
+        customFeatures,
+      }, session.token)
+
+      setModel((current) => current ? {
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.vehicleId === updated.vehicleId ? updated : vehicle),
+      } : current)
+      showToast({ title: 'Vehicle listing saved', detail: `${updated.vehicleLabel} public listing was updated.` })
+    } catch (error) {
+      showToast({ title: 'Vehicle listing not saved', detail: error instanceof Error ? error.message : 'Please choose at least one public photo before publishing.' })
+    }
+  }
+
+  const customFeatureText = (listing: PublicVehicleListing) =>
+    listing.features
+      .filter((feature) => feature.isCustom)
+      .map((feature) => `${feature.icon || '✨'} | ${feature.label}`)
+      .join('\n')
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Showcase" title="Public page" />
+      {loading && <EmptyState title="Loading public page settings" detail="Fetching tenant showcase options." />}
+      {model && (
+        <>
+          <form className="form-panel public-settings-panel" onSubmit={updateSettings}>
+            <h2>Tenant public page</h2>
+            <label className="toggle-row">
+              <input name="enabled" type="checkbox" defaultChecked={model.settings.enabled} />
+              <span>Enable public page</span>
+            </label>
+            {model.settings.publicUrl && (
+              <p className="muted-line">Public URL: <a href={model.settings.publicUrl} target="_blank" rel="noreferrer">{model.settings.publicUrl}</a></p>
+            )}
+            <Field label="Headline" name="headline" defaultValue={model.settings.headline || ''} />
+            <label className="field">
+              <span>Description</span>
+              <textarea name="description" defaultValue={model.settings.description || ''} rows={3} />
+            </label>
+            <label className="field">
+              <span>Booking instructions</span>
+              <textarea name="bookingInstructions" defaultValue={model.settings.bookingInstructions || ''} rows={3} />
+            </label>
+            <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save public page</button></div>
+          </form>
+
+          <section className="public-manager-grid">
+            {model.vehicles.map((listing) => {
+              const selectedFeatureIds = new Set(listing.features.filter((feature) => !feature.isCustom && feature.featureDefinitionId).map((feature) => feature.featureDefinitionId))
+              return (
+                <form className="public-listing-card" key={listing.vehicleId} onSubmit={(event) => saveListing(listing, event)}>
+                  <header>
+                    <div>
+                      <h2>{listing.vehicleLabel}</h2>
+                      <p>{listing.status} · {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
+                    </div>
+                    <label className="toggle-row">
+                      <input name="isPublished" type="checkbox" defaultChecked={listing.isPublished} disabled={listing.publicPhotoCount === 0} />
+                      <span>Published</span>
+                    </label>
+                  </header>
+
+                  {listing.photoCount === 0 && <p className="warning-line">Add at least one vehicle photo before this can be published.</p>}
+                  {listing.photoCount > 0 && listing.publicPhotoCount === 0 && <p className="warning-line">Tick at least one photo below before publishing.</p>}
+
+                  <div className="public-photo-strip">
+                    {listing.photos.map((photo) => {
+                      const src = displayableAssetUrl(photo.displayUrl || photo.fileUrl)
+                      return (
+                        <label className="public-photo-choice" key={photo.id}>
+                          <span>{src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={18} />}</span>
+                          <input type="checkbox" checked={photo.isPublic} onChange={(event) => updatePhotoVisibility(listing, photo, event.target.checked)} />
+                        </label>
+                      )
+                    })}
+                  </div>
+
+                  <div className="form-grid">
+                    <Field label="Price" name="priceAmount" type="number" defaultValue={listing.priceAmount?.toString() || ''} />
+                    <Field label="Price unit" name="priceUnit" defaultValue={listing.priceUnit || 'per day'} />
+                    <Field label="Display order" name="displayOrder" type="number" defaultValue={String(listing.displayOrder)} />
+                    <label className="toggle-row form-toggle">
+                      <input name="showPlateNumber" type="checkbox" defaultChecked={listing.showPlateNumber} />
+                      <span>Show plate number</span>
+                    </label>
+                  </div>
+
+                  <label className="field">
+                    <span>Short renter-facing description</span>
+                    <textarea name="description" rows={3} defaultValue={listing.description || ''} />
+                  </label>
+                  <label className="field">
+                    <span>Rental notes</span>
+                    <textarea name="rentalNotes" rows={3} defaultValue={listing.rentalNotes || ''} />
+                  </label>
+
+                  <fieldset className="feature-fieldset">
+                    <legend>Predefined features</legend>
+                    <div className="feature-check-grid">
+                      {model.featureDefinitions.map((feature) => (
+                        <label key={feature.id}>
+                          <input name="featureDefinitionIds" type="checkbox" value={feature.id} defaultChecked={selectedFeatureIds.has(feature.id)} />
+                          <span>{feature.icon} {feature.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <label className="field">
+                    <span>Custom features</span>
+                    <textarea name="customFeatures" rows={3} defaultValue={customFeatureText(listing)} placeholder="✨ | Child seat available" />
+                  </label>
+
+                  <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save listing</button></div>
+                </form>
+              )
+            })}
+          </section>
+        </>
+      )}
+    </Page>
+  )
+}
+
+function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) {
+  const { tenantSlug } = useParams()
+  const [page, setPage] = useState<PublicTenantPage | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [dark, setDark] = useState(true)
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!tenantSlug) return
+
+    let active = true
+    setLoading(true)
+    getJson<PublicTenantPage>(`/api/public/${encodeURIComponent(tenantSlug)}`)
+      .then((result) => {
+        if (active) {
+          setPage(result)
+          setSelectedVehicleId(result.vehicles[0]?.vehicleId || '')
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPage(null)
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [tenantSlug])
+
+  const selectVehicle = (vehicle: PublicTenantVehicle) => {
+    setSelectedVehicleId(vehicle.vehicleId)
+    window.setTimeout(() => document.getElementById('public-booking-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 20)
+  }
+
+  const submitInquiry = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!tenantSlug) return
+
+    const form = new FormData(event.currentTarget)
+    const startValue = formString(form, 'startDateTime')
+    const endValue = formString(form, 'endDateTime')
+    setSubmitting(true)
+    try {
+      await postJson(`/api/public/${encodeURIComponent(tenantSlug)}/booking-inquiries`, {
+        vehicleId: formString(form, 'vehicleId'),
+        renterName: formString(form, 'renterName'),
+        contactNumber: formString(form, 'contactNumber'),
+        email: formString(form, 'email') || null,
+        startDateTime: new Date(startValue).toISOString(),
+        endDateTime: new Date(endValue).toISOString(),
+        message: formString(form, 'message') || null,
+      })
+      event.currentTarget.reset()
+      setSelectedVehicleId(page?.vehicles[0]?.vehicleId || '')
+      showToast({ title: 'Inquiry sent', detail: 'The fleet owner will review your booking request.' })
+    } catch (error) {
+      showToast({ title: 'Inquiry not sent', detail: error instanceof Error ? error.message : 'Please review the form.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return <main className={`public-page ${dark ? 'theme-dark' : 'theme-light'}`}><p>Loading...</p></main>
+  }
+
+  if (!page) {
+    return <main className="public-page theme-dark"><section className="public-empty"><h1>Page unavailable</h1><p>This fleet page is not currently published.</p></section></main>
+  }
+
+  return (
+    <main className={`public-page ${dark ? 'theme-dark' : 'theme-light'}`}>
+      <header className="public-header">
+        <Link className="public-brand" to={`/${page.slug}`}>{page.companyName}</Link>
+        <button className="public-theme-toggle" type="button" onClick={() => setDark((current) => !current)}>
+          {dark ? <Sun size={16} /> : <Moon size={16} />}
+          {dark ? 'Light' : 'Dark'}
+        </button>
+      </header>
+
+      <section className="public-intro">
+        <p>{page.headline || 'Available fleet'}</p>
+        {page.description && <span>{page.description}</span>}
+      </section>
+
+      <section className="public-vehicle-grid">
+        {page.vehicles.map((vehicle) => {
+          const primaryPhoto = displayableAssetUrl(vehicle.photos[0]?.displayUrl)
+          return (
+            <article className="public-vehicle-card" key={vehicle.vehicleId}>
+              <div className="public-vehicle-photo">
+                {primaryPhoto ? <img src={primaryPhoto} alt={vehicle.vehicleLabel} /> : <Camera size={24} />}
+              </div>
+              <div className="public-vehicle-body">
+                <div className="public-vehicle-title">
+                  <h2>{vehicle.vehicleLabel}</h2>
+                  {vehicle.priceAmount && <span>{money.format(vehicle.priceAmount)} {vehicle.priceUnit || ''}</span>}
+                </div>
+                <p>{vehicle.description || [vehicle.vehicleType, vehicle.fuelType, `${vehicle.passengerCapacity} seats`].filter(Boolean).join(' · ')}</p>
+                <div className="public-features">
+                  {vehicle.features.map((feature) => <span key={`${vehicle.vehicleId}-${feature.label}`}>{feature.icon} {feature.label}</span>)}
+                </div>
+                {vehicle.rentalNotes && <small>{vehicle.rentalNotes}</small>}
+                <button className="public-select-button" type="button" onClick={() => selectVehicle(vehicle)}>Select this vehicle</button>
+              </div>
+            </article>
+          )
+        })}
+      </section>
+
+      {page.vehicles.length === 0 && <section className="public-empty"><h2>No vehicles are published yet.</h2><p>Please check back soon.</p></section>}
+
+      {page.vehicles.length > 0 && (
+        <section className="public-booking-panel" id="public-booking-form">
+          <div>
+            <h2>Request a booking</h2>
+            <p>{page.bookingInstructions || 'Send your preferred schedule and contact details. The fleet team will confirm availability.'}</p>
+          </div>
+          <form onSubmit={submitInquiry}>
+            <label>
+              <span>Vehicle</span>
+              <select name="vehicleId" value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)} required>
+                {page.vehicles.map((vehicle) => <option key={vehicle.vehicleId} value={vehicle.vehicleId}>{vehicle.vehicleLabel}</option>)}
+              </select>
+            </label>
+            <label><span>Name</span><input name="renterName" required /></label>
+            <label><span>Contact number</span><input name="contactNumber" required /></label>
+            <label><span>Email</span><input name="email" type="email" /></label>
+            <label><span>Start date/time</span><input name="startDateTime" type="datetime-local" required /></label>
+            <label><span>End date/time</span><input name="endDateTime" type="datetime-local" required /></label>
+            <label className="public-form-wide"><span>Message</span><textarea name="message" rows={4} /></label>
+            <button className="public-submit-button" type="submit" disabled={submitting}>{submitting ? 'Sending...' : 'Send inquiry'}</button>
+          </form>
+        </section>
+      )}
+    </main>
   )
 }
 
@@ -2728,6 +3210,164 @@ function EntityDocumentsPanel({
   )
 }
 
+function EntityPhotosPanel({
+  entityType,
+  entityId,
+  entityLabel,
+  session,
+  showToast,
+}: {
+  entityType: 'Vehicle' | 'Driver'
+  entityId: string
+  entityLabel: string
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
+}) {
+  const [photos, setPhotos] = useState<PhotoItem[]>([])
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  useEffect(() => {
+    if (!session?.token || !entityId) {
+      setPhotos([])
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<PhotoItem[]>(`/api/photos?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`, session.token)
+      .then((items) => {
+        if (active) {
+          setPhotos(items)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Photos not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [entityType, entityId, session?.token])
+
+  const upload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setUploading(true)
+    try {
+      const uploaded = await uploadPhotoFromForm(new FormData(event.currentTarget), session)
+      setPhotos((current) => [uploaded, ...current].sort((a, b) => a.displayOrder - b.displayOrder))
+      setUploadOpen(false)
+      showToast({ title: 'Photo uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+    } catch (error) {
+      showToast({ title: 'Photo not uploaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const updatePhoto = async (photo: PhotoItem, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!session?.token) return
+
+    const form = new FormData(event.currentTarget)
+    try {
+      const updated = await putJson<PhotoItem>(`/api/photos/${photo.id}`, {
+        isPublic: form.get('isPublic') === 'on',
+        caption: formString(form, 'caption') || null,
+        displayOrder: formNumber(form, 'displayOrder', photo.displayOrder),
+      }, session.token)
+      setPhotos((current) => current.map((item) => item.id === photo.id ? updated : item).sort((a, b) => a.displayOrder - b.displayOrder))
+      showToast({ title: 'Photo updated', detail: 'Display settings were saved.' })
+    } catch (error) {
+      showToast({ title: 'Photo not updated', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const removePhoto = async (photo: PhotoItem) => {
+    if (!session?.token) return
+
+    try {
+      await deleteJson(`/api/photos/${photo.id}`, session.token)
+      setPhotos((current) => current.filter((item) => item.id !== photo.id))
+      showToast({ title: 'Photo removed', detail: `${photo.originalFileName} was removed from this record.` })
+    } catch (error) {
+      showToast({ title: 'Photo not removed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  return (
+    <Panel
+      title="Photos"
+      action={<button className="secondary-button" type="button" onClick={() => setUploadOpen(true)}><Images size={16} /> Add photo</button>}
+    >
+      {loading && <p className="muted-line">Loading photos...</p>}
+      {!loading && photos.length === 0 && <EmptyState title="No photos yet" detail={`Upload ${entityType.toLowerCase()} photos for profiles, documents, and public listings.`} />}
+      <div className="photo-grid">
+        {photos.map((photo) => {
+          const src = displayableAssetUrl(photo.displayUrl || photo.fileUrl)
+          return (
+            <form className="photo-card" key={photo.id} onSubmit={(event) => updatePhoto(photo, event)}>
+              <div className="photo-thumb">
+                {src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={24} />}
+              </div>
+              <div className="photo-card-body">
+                <span className="photo-name">{photo.originalFileName}</span>
+                <label className="field compact-field">
+                  <span>Caption</span>
+                  <input name="caption" defaultValue={photo.caption || ''} />
+                </label>
+                <div className="photo-controls">
+                  <label className="toggle-row">
+                    <input name="isPublic" type="checkbox" defaultChecked={photo.isPublic} />
+                    <span>{entityType === 'Vehicle' ? 'Can show on public page' : 'Public photo'}</span>
+                  </label>
+                  <label className="field compact-field order-field">
+                    <span>Order</span>
+                    <input name="displayOrder" type="number" defaultValue={String(photo.displayOrder)} />
+                  </label>
+                </div>
+                <div className="photo-actions">
+                  <button className="secondary-button compact-button" type="submit"><Save size={15} /> Save</button>
+                  <button className="icon-button danger" type="button" title="Remove photo" onClick={() => removePhoto(photo)}><Trash2 size={15} /></button>
+                </div>
+              </div>
+            </form>
+          )
+        })}
+      </div>
+      <Modal title={`Upload ${entityType.toLowerCase()} photo`} open={uploadOpen} onClose={() => setUploadOpen(false)}>
+        <form className="modal-form" onSubmit={upload}>
+          <input type="hidden" name="entityType" value={entityType} />
+          <input type="hidden" name="entityId" value={entityId} />
+          <label className="field full">
+            <span>Related record</span>
+            <input value={`${entityType} - ${entityLabel}`} readOnly />
+          </label>
+          <label className="field full">
+            <span>Photo file</span>
+            <input name="file" type="file" accept="image/*" required />
+          </label>
+          <Field label="Caption" name="caption" />
+          <Field label="Display order" name="displayOrder" type="number" defaultValue="0" />
+          <label className="toggle-row full">
+            <input name="isPublic" type="checkbox" />
+            <span>{entityType === 'Vehicle' ? 'Allow this photo on the public page' : 'Mark as public photo'}</span>
+          </label>
+          <button className="primary-button full" type="submit" disabled={uploading}><Upload size={18} /> {uploading ? 'Uploading...' : 'Upload photo'}</button>
+        </form>
+      </Modal>
+    </Panel>
+  )
+}
+
 function Toolbar({ query, setQuery, placeholder, children }: { query: string; setQuery: (value: string) => void; placeholder: string; children?: React.ReactNode }) {
   return (
     <div className="toolbar">
@@ -2925,11 +3565,70 @@ function formNumber(form: FormData, name: string, fallback = 0) {
   return Number.isFinite(value) ? value : fallback
 }
 
+function parseCustomFeatures(value: string) {
+  return value
+    .split('\n')
+    .map((line, index) => {
+      const trimmed = line.trim()
+      if (!trimmed) return null
+
+      const [rawIcon, ...labelParts] = trimmed.split('|')
+      const label = labelParts.length > 0 ? labelParts.join('|').trim() : trimmed
+      return {
+        icon: labelParts.length > 0 ? rawIcon.trim() || '✨' : '✨',
+        label,
+        displayOrder: 1000 + index,
+      }
+    })
+    .filter((feature): feature is { icon: string; label: string; displayOrder: number } => Boolean(feature?.label))
+}
+
 function formOptionalNumber(form: FormData, name: string) {
   const raw = form.get(name)
   if (raw === null || raw === '') return undefined
   const value = Number(raw)
   return Number.isFinite(value) ? value : undefined
+}
+
+function vehicleFromApi(vehicle: VehicleApiDto): Vehicle {
+  return {
+    id: vehicle.id,
+    plateNumber: vehicle.plateNumber,
+    mvFileNumber: vehicle.mvFileNumber || '',
+    engineNumber: vehicle.engineNumber || '',
+    chassisVinNumber: vehicle.chassisVinNumber || '',
+    make: vehicle.make,
+    model: vehicle.model,
+    seriesVariant: vehicle.seriesVariant || '',
+    yearModel: vehicle.yearModel,
+    color: vehicle.color || '',
+    vehicleType: vehicle.vehicleType || '',
+    bodyType: vehicle.bodyType || '',
+    fuelType: vehicle.fuelType || '',
+    passengerCapacity: vehicle.passengerCapacity,
+    classification: vehicle.classification || '',
+    grossWeight: vehicle.grossWeight ? `${vehicle.grossWeight.toLocaleString()} kg` : '',
+    currentOdometer: vehicle.currentOdometer,
+    ownershipStatus: vehicle.ownershipStatus,
+    status: vehicle.status,
+    remarks: vehicle.remarks || '',
+  }
+}
+
+function driverFromApi(driver: DriverApiDto): Driver {
+  return {
+    id: driver.id,
+    fullName: driver.fullName,
+    address: driver.address || '',
+    contactNumber: driver.contactNumber || '',
+    email: driver.email || '',
+    emergencyContact: driver.emergencyContact || '',
+    licenseNumber: driver.licenseNumber || '',
+    licenseTypeRestrictions: driver.licenseTypeRestrictions || '',
+    licenseExpirationDate: driver.licenseExpirationDate || '',
+    status: driver.status,
+    notes: driver.notes || '',
+  }
 }
 
 function vehicleFromForm(form: FormData, existing?: Vehicle): Vehicle {

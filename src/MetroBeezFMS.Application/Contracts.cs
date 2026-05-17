@@ -91,11 +91,20 @@ public sealed record VehicleUpsertDto(
 public sealed record VehicleListDto(
     Guid Id,
     string PlateNumber,
+    string? MvFileNumber,
+    string? EngineNumber,
+    string? ChassisVinNumber,
     string Make,
     string Model,
+    string? SeriesVariant,
     int YearModel,
     string? Color,
+    string? VehicleType,
+    string? BodyType,
     string? FuelType,
+    int PassengerCapacity,
+    string? Classification,
+    decimal? GrossWeight,
     int CurrentOdometer,
     OwnershipStatus OwnershipStatus,
     VehicleStatus Status,
@@ -116,9 +125,12 @@ public sealed record DriverUpsertDto(
 public sealed record DriverListDto(
     Guid Id,
     string FullName,
+    string? Address,
     string? ContactNumber,
     string? Email,
+    string? EmergencyContact,
     string? LicenseNumber,
+    string? LicenseTypeRestrictions,
     DateOnly? LicenseExpirationDate,
     DriverStatus Status,
     string? Notes);
@@ -259,7 +271,140 @@ public sealed record DocumentAttachmentDto(
     long FileSize,
     string DocumentType,
     DateOnly? ExpirationDate,
+    DateTimeOffset UploadedAt,
+    bool IsPhoto,
+    bool IsPublic,
+    string? Caption,
+    int DisplayOrder);
+
+public sealed record PhotoDto(
+    Guid Id,
+    string EntityType,
+    Guid EntityId,
+    string OriginalFileName,
+    string FileUrl,
+    string? DisplayUrl,
+    string? ContentType,
+    long FileSize,
+    bool IsPublic,
+    string? Caption,
+    int DisplayOrder,
     DateTimeOffset UploadedAt);
+
+public sealed record UpdatePhotoRequest(bool IsPublic, string? Caption, int DisplayOrder);
+
+public sealed record PublicPageSettingsDto(
+    bool Enabled,
+    string? Slug,
+    string? PublicUrl,
+    string CompanyName,
+    string? Headline,
+    string? Description,
+    string? BookingInstructions);
+
+public sealed record UpdatePublicPageSettingsRequest(
+    bool Enabled,
+    string? Headline,
+    string? Description,
+    string? BookingInstructions);
+
+public sealed record VehicleFeatureDefinitionDto(
+    Guid Id,
+    string Code,
+    string Label,
+    string Icon,
+    int SortOrder);
+
+public sealed record PublicVehicleFeatureDto(
+    Guid? FeatureDefinitionId,
+    string Label,
+    string Icon,
+    bool IsCustom,
+    int DisplayOrder);
+
+public sealed record CustomVehicleFeatureRequest(string Label, string? Icon, int DisplayOrder);
+
+public sealed record UpdatePublicVehicleListingRequest(
+    bool IsPublished,
+    decimal? PriceAmount,
+    string? PriceUnit,
+    string? Description,
+    string? RentalNotes,
+    bool ShowPlateNumber,
+    int DisplayOrder,
+    IEnumerable<Guid> FeatureDefinitionIds,
+    IEnumerable<CustomVehicleFeatureRequest> CustomFeatures);
+
+public sealed record PublicVehicleListingDto(
+    Guid? Id,
+    Guid VehicleId,
+    string VehicleLabel,
+    string Status,
+    int PhotoCount,
+    int PublicPhotoCount,
+    bool IsPublished,
+    decimal? PriceAmount,
+    string? PriceUnit,
+    string? Description,
+    string? RentalNotes,
+    bool ShowPlateNumber,
+    int DisplayOrder,
+    IEnumerable<PhotoDto> Photos,
+    IEnumerable<PublicVehicleFeatureDto> Features);
+
+public sealed record PublicPageManagementDto(
+    PublicPageSettingsDto Settings,
+    IEnumerable<VehicleFeatureDefinitionDto> FeatureDefinitions,
+    IEnumerable<PublicVehicleListingDto> Vehicles);
+
+public sealed record PublicTenantPhotoDto(
+    Guid Id,
+    string? DisplayUrl,
+    string? Caption,
+    int DisplayOrder);
+
+public sealed record PublicTenantVehicleDto(
+    Guid VehicleId,
+    string VehicleLabel,
+    string? PlateNumber,
+    string? VehicleType,
+    string? FuelType,
+    int PassengerCapacity,
+    decimal? PriceAmount,
+    string? PriceUnit,
+    string? Description,
+    string? RentalNotes,
+    IEnumerable<PublicTenantPhotoDto> Photos,
+    IEnumerable<PublicVehicleFeatureDto> Features);
+
+public sealed record PublicTenantPageDto(
+    string CompanyName,
+    string Slug,
+    string? Headline,
+    string? Description,
+    string? BookingInstructions,
+    IEnumerable<PublicTenantVehicleDto> Vehicles);
+
+public sealed record PublicBookingInquiryRequest(
+    Guid VehicleId,
+    string RenterName,
+    string ContactNumber,
+    string? Email,
+    DateTimeOffset StartDateTime,
+    DateTimeOffset EndDateTime,
+    string? Message);
+
+public sealed record PublicBookingInquiryDto(
+    Guid Id,
+    Guid? VehicleId,
+    string RenterName,
+    string ContactNumber,
+    string? Email,
+    DateTimeOffset StartDateTime,
+    DateTimeOffset EndDateTime,
+    string? Message,
+    string Status,
+    DateTimeOffset CreatedAt);
 
 public sealed record NotificationDto(
     Guid Id,

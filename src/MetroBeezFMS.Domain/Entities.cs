@@ -31,6 +31,10 @@ public sealed class CompanyProfile : SoftDeletableEntity
     public string? ContactNumber { get; set; }
     public string? BirDtiLguDocumentUrl { get; set; }
     public string? LogoUrl { get; set; }
+    public bool PublicPageEnabled { get; set; }
+    public string? PublicPageHeadline { get; set; }
+    public string? PublicPageDescription { get; set; }
+    public string? PublicBookingInstructions { get; set; }
 }
 
 public sealed class Driver : SoftDeletableEntity
@@ -75,6 +79,7 @@ public sealed class Vehicle : SoftDeletableEntity
     public string? Remarks { get; set; }
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     public ICollection<Trip> Trips { get; set; } = new List<Trip>();
+    public PublicVehicleListing? PublicListing { get; set; }
 }
 
 public sealed class Renter : SoftDeletableEntity
@@ -225,6 +230,58 @@ public sealed class DocumentAttachment : SoftDeletableEntity
     public DateOnly? ExpirationDate { get; set; }
     public string? UploadedBy { get; set; }
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
+    public bool IsPhoto { get; set; }
+    public bool IsPublic { get; set; }
+    public string? Caption { get; set; }
+    public int DisplayOrder { get; set; }
+}
+
+public sealed class VehicleFeatureDefinition : AuditableEntity
+{
+    public required string Code { get; set; }
+    public required string Label { get; set; }
+    public required string Icon { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public ICollection<PublicVehicleFeature> PublicVehicleFeatures { get; set; } = new List<PublicVehicleFeature>();
+}
+
+public sealed class PublicVehicleListing : SoftDeletableEntity
+{
+    public Guid VehicleId { get; set; }
+    public bool IsPublished { get; set; }
+    public decimal? PriceAmount { get; set; }
+    public string? PriceUnit { get; set; }
+    public string? Description { get; set; }
+    public string? RentalNotes { get; set; }
+    public bool ShowPlateNumber { get; set; }
+    public int DisplayOrder { get; set; }
+    public Vehicle? Vehicle { get; set; }
+    public ICollection<PublicVehicleFeature> Features { get; set; } = new List<PublicVehicleFeature>();
+}
+
+public sealed class PublicVehicleFeature : AuditableEntity
+{
+    public Guid PublicVehicleListingId { get; set; }
+    public Guid? FeatureDefinitionId { get; set; }
+    public string? CustomLabel { get; set; }
+    public string? CustomIcon { get; set; }
+    public int DisplayOrder { get; set; }
+    public PublicVehicleListing? PublicVehicleListing { get; set; }
+    public VehicleFeatureDefinition? FeatureDefinition { get; set; }
+}
+
+public sealed class PublicBookingInquiry : AuditableEntity
+{
+    public Guid? VehicleId { get; set; }
+    public required string RenterName { get; set; }
+    public required string ContactNumber { get; set; }
+    public string? Email { get; set; }
+    public DateTimeOffset StartDateTime { get; set; }
+    public DateTimeOffset EndDateTime { get; set; }
+    public string? Message { get; set; }
+    public string Status { get; set; } = "New";
+    public Vehicle? Vehicle { get; set; }
 }
 
 public sealed class Notification : AuditableEntity
