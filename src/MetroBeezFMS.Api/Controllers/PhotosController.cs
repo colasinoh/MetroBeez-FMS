@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System.Text;
 
 namespace MetroBeezFMS.Api.Controllers;
 
@@ -201,14 +202,62 @@ public sealed class PhotosController : ControllerBase
             return "Use an image smaller than 8 MB.";
         }
 
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        var contentType = file.ContentType?.ToLowerInvariant();
-        var supported = contentType is "image/jpeg" or "image/png" or "image/webp"
-            || extension is ".jpg" or ".jpeg" or ".png" or ".webp";
+        var detectedType = DetectBrowserImageType(file);
+        if (detectedType == "heic")
+        {
+            return "This file is a HEIC/HEIF photo. Convert it to JPG, PNG, or WebP first so browsers can preview it.";
+        }
 
-        return supported
-            ? null
-            : "Use a JPG, PNG, or WebP image. HEIC photos need to be converted first so browsers can preview them.";
+        if (detectedType is not "jpeg" and not "png" and not "webp")
+        {
+            return "Use a real JPG, PNG, or WebP image. Renamed HEIC or unsupported files cannot be previewed by browsers.";
+        }
+
+        return null;
+    }
+
+    private static string? DetectBrowserImageType(IFormFile file)
+    {
+        Span<byte> buffer = stackalloc byte[32];
+        using var stream = file.OpenReadStream();
+        var bytesRead = stream.Read(buffer);
+        var bytes = buffer[..bytesRead];
+
+        if (bytesRead >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "jpeg";
+        }
+
+        if (bytesRead >= 8
+            && bytes[0] == 0x89
+            && bytes[1] == 0x50
+            && bytes[2] == 0x4E
+            && bytes[3] == 0x47
+            && bytes[4] == 0x0D
+            && bytes[5] == 0x0A
+            && bytes[6] == 0x1A
+            && bytes[7] == 0x0A)
+        {
+            return "png";
+        }
+
+        if (bytesRead >= 12
+            && Encoding.ASCII.GetString(bytes[..4]) == "RIFF"
+            && Encoding.ASCII.GetString(bytes.Slice(8, 4)) == "WEBP")
+        {
+            return "webp";
+        }
+
+        if (bytesRead >= 12 && Encoding.ASCII.GetString(bytes.Slice(4, 4)) == "ftyp")
+        {
+            var brand = Encoding.ASCII.GetString(bytes.Slice(8, Math.Min(bytesRead - 8, 16))).ToLowerInvariant();
+            if (brand.Contains("heic") || brand.Contains("heix") || brand.Contains("hevc") || brand.Contains("hevx") || brand.Contains("mif1") || brand.Contains("msf1"))
+            {
+                return "heic";
+            }
+        }
+
+        return null;
     }
 
     private static bool IsMissingPhotoMigration(PostgresException exception)

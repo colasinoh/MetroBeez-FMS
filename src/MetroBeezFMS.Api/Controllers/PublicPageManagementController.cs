@@ -26,6 +26,20 @@ public sealed class PublicPageManagementController : ControllerBase
         ("delivery", "Delivery/logistics", "📦", 100)
     ];
 
+    private static readonly (string Code, string Label, string Icon, int SortOrder)[] CleanDefaultFeatures =
+    [
+        ("aircon", "Air conditioning", "AC", 10),
+        ("automatic", "Automatic transmission", "AT", 20),
+        ("manual", "Manual transmission", "MT", 30),
+        ("driver", "Driver available", "DR", 40),
+        ("self_drive", "Self-drive ready", "SD", 50),
+        ("fuel_efficient", "Fuel efficient", "FE", 60),
+        ("large_luggage", "Large luggage space", "LG", 70),
+        ("bluetooth", "Bluetooth audio", "BT", 80),
+        ("dashcam", "Dashcam", "DC", 90),
+        ("delivery", "Delivery/logistics", "DL", 100)
+    ];
+
     private readonly TenantDbContextFactory _tenantDbContextFactory;
     private readonly CentralDbContext _centralDbContext;
     private readonly ICurrentTenantService _currentTenant;
@@ -126,7 +140,6 @@ public sealed class PublicPageManagementController : ControllerBase
         }
 
         var listing = await db.PublicVehicleListings
-            .Include(x => x.Features)
             .FirstOrDefaultAsync(x => x.VehicleId == vehicleId, cancellationToken);
 
         if (listing is null)
@@ -149,14 +162,16 @@ public sealed class PublicPageManagementController : ControllerBase
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        db.PublicVehicleFeatures.RemoveRange(listing.Features);
-        listing.Features.Clear();
+        await db.PublicVehicleFeatures
+            .Where(x => x.PublicVehicleListingId == listing.Id)
+            .ExecuteDeleteAsync(cancellationToken);
 
         var displayOrder = 0;
         foreach (var featureId in validFeatureIds)
         {
-            listing.Features.Add(new PublicVehicleFeature
+            db.PublicVehicleFeatures.Add(new PublicVehicleFeature
             {
+                PublicVehicleListingId = listing.Id,
                 FeatureDefinitionId = featureId,
                 DisplayOrder = displayOrder++
             });
@@ -169,8 +184,9 @@ public sealed class PublicPageManagementController : ControllerBase
                 continue;
             }
 
-            listing.Features.Add(new PublicVehicleFeature
+            db.PublicVehicleFeatures.Add(new PublicVehicleFeature
             {
+                PublicVehicleListingId = listing.Id,
                 CustomLabel = custom.Label.Trim(),
                 CustomIcon = TrimToNull(custom.Icon) ?? "+",
                 DisplayOrder = custom.DisplayOrder
@@ -210,20 +226,29 @@ public sealed class PublicPageManagementController : ControllerBase
 
     private static async Task EnsureFeatureDefinitionsAsync(TenantDbContext db, CancellationToken cancellationToken)
     {
-        var existingCodes = await db.VehicleFeatureDefinitions
-            .Select(x => x.Code)
+        var definitions = await db.VehicleFeatureDefinitions
             .ToListAsync(cancellationToken);
 
-        foreach (var feature in DefaultFeatures.Where(feature => !existingCodes.Contains(feature.Code)))
+        foreach (var feature in CleanDefaultFeatures)
         {
-            db.VehicleFeatureDefinitions.Add(new VehicleFeatureDefinition
+            var existing = definitions.FirstOrDefault(x => x.Code == feature.Code);
+            if (existing is null)
             {
-                Code = feature.Code,
-                Label = feature.Label,
-                Icon = feature.Icon,
-                SortOrder = feature.SortOrder,
-                IsActive = true
-            });
+                db.VehicleFeatureDefinitions.Add(new VehicleFeatureDefinition
+                {
+                    Code = feature.Code,
+                    Label = feature.Label,
+                    Icon = feature.Icon,
+                    SortOrder = feature.SortOrder,
+                    IsActive = true
+                });
+                continue;
+            }
+
+            existing.Label = feature.Label;
+            existing.Icon = feature.Icon;
+            existing.SortOrder = feature.SortOrder;
+            existing.IsActive = true;
         }
 
         await db.SaveChangesAsync(cancellationToken);

@@ -230,7 +230,7 @@ type VehicleApiDto = {
   grossWeight?: number | null
   currentOdometer: number
   ownershipStatus: Vehicle['ownershipStatus']
-  status: VehicleStatus
+  status: 'Available' | 'Booked' | 'UnderMaintenance' | 'Inactive'
   remarks?: string | null
 }
 
@@ -662,7 +662,7 @@ function App() {
           <Route path="/dashboard" element={session?.role === 'SuperAdmin' ? <Navigate to="/admin/tenants" replace /> : <DashboardPage data={data} />} />
           <Route
             path="/vehicles"
-            element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} documents={documents} trips={trips} />}
+            element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} session={session} showToast={showToast} />}
           />
           <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} setVehicles={setVehicles} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route path="/drivers" element={<DriversPage drivers={drivers} setDrivers={setDrivers} trips={trips} />} />
@@ -1013,11 +1013,13 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
 function VehiclesPage({
   vehicles,
   setVehicles,
+  session,
+  showToast,
 }: {
   vehicles: Vehicle[]
   setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
-  documents: DocumentAttachment[]
-  trips: Trip[]
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'All' | VehicleStatus>('All')
@@ -1034,19 +1036,55 @@ function VehiclesPage({
       .sort((a, b) => a.plateNumber.localeCompare(b.plateNumber))
   }, [vehicles, query, status])
 
-  const addVehicle = (event: FormEvent<HTMLFormElement>) => {
+  const addVehicle = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setVehicles((current) => [...current, vehicleFromForm(form)])
-    setModalOpen(false)
+    if (!session?.token) {
+      showToast({ title: 'Vehicle not saved', detail: 'Please sign in again before changing vehicles.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<VehicleApiDto>('/api/vehicles', vehiclePayloadFromForm(new FormData(event.currentTarget)), session.token)
+      setVehicles((current) => [vehicleFromApi(saved), ...current])
+      setModalOpen(false)
+      showToast({ title: 'Vehicle saved', detail: `${saved.plateNumber} was added to the fleet.` })
+    } catch (error) {
+      showToast({ title: 'Vehicle not saved', detail: error instanceof Error ? error.message : 'Please review the vehicle details.' })
+    }
   }
   const editingVehicle = vehicles.find((vehicle) => vehicle.id === editId)
-  const editVehicle = (event: FormEvent<HTMLFormElement>) => {
+  const editVehicle = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingVehicle) return
-    const form = new FormData(event.currentTarget)
-    setVehicles((current) => current.map((vehicle) => vehicle.id === editingVehicle.id ? vehicleFromForm(form, editingVehicle) : vehicle))
-    setEditId(null)
+    if (!session?.token) {
+      showToast({ title: 'Vehicle not saved', detail: 'Please sign in again before changing vehicles.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<VehicleApiDto>(`/api/vehicles/${editingVehicle.id}`, vehiclePayloadFromForm(new FormData(event.currentTarget), editingVehicle), session.token)
+      setVehicles((current) => current.map((vehicle) => vehicle.id === editingVehicle.id ? vehicleFromApi(saved) : vehicle))
+      setEditId(null)
+      showToast({ title: 'Vehicle updated', detail: `${saved.plateNumber} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'Vehicle not saved', detail: error instanceof Error ? error.message : 'Please review the vehicle details.' })
+    }
+  }
+
+  const deleteVehicle = async () => {
+    if (!deleteId || !session?.token) {
+      setDeleteId(null)
+      return
+    }
+
+    try {
+      await deleteJson(`/api/vehicles/${deleteId}`, session.token)
+      setVehicles((current) => current.filter((vehicle) => vehicle.id !== deleteId))
+      setDeleteId(null)
+      showToast({ title: 'Vehicle deleted', detail: 'The vehicle was removed from the active fleet list.' })
+    } catch (error) {
+      showToast({ title: 'Vehicle not deleted', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
   }
 
   return (
@@ -1099,12 +1137,9 @@ function VehiclesPage({
       <ConfirmDialog
         open={Boolean(deleteId)}
         title="Delete vehicle"
-        detail="This will soft-delete the vehicle record in the backend pattern."
+        detail="This removes the vehicle from this tenant workspace."
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
-          setVehicles((current) => current.filter((vehicle) => vehicle.id !== deleteId))
-          setDeleteId(null)
-        }}
+        onConfirm={deleteVehicle}
       />
     </Page>
   )
@@ -1181,12 +1216,21 @@ function VehicleDetailsPage({
       <Modal title="Edit vehicle" open={editOpen} onClose={() => setEditOpen(false)}>
         <VehicleForm
           defaultValues={vehicle}
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
-            setVehicles((current) => current.map((item) => item.id === vehicle.id ? vehicleFromForm(form, vehicle) : item))
-            setEditOpen(false)
-            showToast({ title: 'Vehicle updated', detail: `${vehicle.plateNumber} changes were saved.` })
+            if (!session?.token) {
+              showToast({ title: 'Vehicle not saved', detail: 'Please sign in again before changing vehicles.' })
+              return
+            }
+
+            try {
+              const saved = await putJson<VehicleApiDto>(`/api/vehicles/${vehicle.id}`, vehiclePayloadFromForm(new FormData(event.currentTarget), vehicle), session.token)
+              setVehicles((current) => current.map((item) => item.id === vehicle.id ? vehicleFromApi(saved) : item))
+              setEditOpen(false)
+              showToast({ title: 'Vehicle updated', detail: `${saved.plateNumber} changes were saved.` })
+            } catch (error) {
+              showToast({ title: 'Vehicle not saved', detail: error instanceof Error ? error.message : 'Please review the vehicle details.' })
+            }
           }}
           submitLabel="Save vehicle changes"
         />
@@ -2153,10 +2197,11 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
 
                   <div className="public-photo-strip">
                     {listing.photos.map((photo) => {
-                      const src = displayableAssetUrl(photo.displayUrl)
                       return (
                         <label className="public-photo-choice" key={photo.id}>
-                          <span>{src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={18} />}</span>
+                          <span>
+                            <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={18} />} />
+                          </span>
                           <input type="checkbox" checked={photo.isPublic} onChange={(event) => updatePhotoVisibility(listing, photo, event.target.checked)} />
                         </label>
                       )
@@ -2304,11 +2349,10 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
 
       <section className="public-vehicle-grid">
         {page.vehicles.map((vehicle) => {
-          const primaryPhoto = displayableAssetUrl(vehicle.photos[0]?.displayUrl)
           return (
             <article className="public-vehicle-card" key={vehicle.vehicleId}>
               <div className="public-vehicle-photo">
-                {primaryPhoto ? <img src={primaryPhoto} alt={vehicle.vehicleLabel} /> : <Camera size={24} />}
+                <SafeImage src={vehicle.photos[0]?.displayUrl} alt={vehicle.vehicleLabel} fallback={<Camera size={24} />} />
               </div>
               <div className="public-vehicle-body">
                 <div className="public-vehicle-title">
@@ -3357,11 +3401,10 @@ function EntityPhotosPanel({
       {!loading && !loadError && photos.length === 0 && <EmptyState title="No photos yet" detail={`Add ${entityType.toLowerCase()} photos here. Vehicle photos can be selected later for the public page.`} />}
       <div className="photo-grid">
         {photos.map((photo) => {
-          const src = displayableAssetUrl(photo.displayUrl)
           return (
             <article className="photo-card" key={photo.id}>
               <div className="photo-thumb">
-                {src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={24} />}
+                <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={24} />} />
               </div>
               <div className="photo-card-body">
                 <span className="photo-name">{photo.caption || photo.originalFileName}</span>
@@ -3588,6 +3631,21 @@ function formString(form: FormData, name: string, fallback?: string) {
   return typeof value === 'string' && value.length > 0 ? value : fallback ?? ''
 }
 
+function nullableFormString(form: FormData, name: string, fallback?: string) {
+  const value = formString(form, name, fallback).trim()
+  return value || null
+}
+
+function nullableFormNumber(form: FormData, name: string, fallback?: string | number) {
+  const rawValue = formString(form, name, fallback === undefined ? undefined : String(fallback)).replace(/[^\d.-]/g, '')
+  if (!rawValue) {
+    return null
+  }
+
+  const value = Number(rawValue)
+  return Number.isFinite(value) ? value : null
+}
+
 function formNumber(form: FormData, name: string, fallback = 0) {
   const value = Number(form.get(name))
   return Number.isFinite(value) ? value : fallback
@@ -3638,7 +3696,7 @@ function vehicleFromApi(vehicle: VehicleApiDto): Vehicle {
     grossWeight: vehicle.grossWeight ? `${vehicle.grossWeight.toLocaleString()} kg` : '',
     currentOdometer: vehicle.currentOdometer,
     ownershipStatus: vehicle.ownershipStatus,
-    status: vehicle.status,
+    status: vehicle.status === 'UnderMaintenance' ? 'Under Maintenance' : vehicle.status,
     remarks: vehicle.remarks || '',
   }
 }
@@ -3659,29 +3717,32 @@ function driverFromApi(driver: DriverApiDto): Driver {
   }
 }
 
-function vehicleFromForm(form: FormData, existing?: Vehicle): Vehicle {
+function vehiclePayloadFromForm(form: FormData, existing?: Vehicle): Omit<VehicleApiDto, 'id'> {
   return {
-    id: existing?.id ?? crypto.randomUUID(),
-    plateNumber: formString(form, 'plateNumber', existing?.plateNumber),
-    mvFileNumber: formString(form, 'mvFileNumber', existing?.mvFileNumber),
-    engineNumber: formString(form, 'engineNumber', existing?.engineNumber),
-    chassisVinNumber: formString(form, 'chassisVinNumber', existing?.chassisVinNumber),
-    make: formString(form, 'make', existing?.make),
-    model: formString(form, 'model', existing?.model),
-    seriesVariant: formString(form, 'seriesVariant', existing?.seriesVariant),
+    plateNumber: formString(form, 'plateNumber', existing?.plateNumber).trim(),
+    mvFileNumber: nullableFormString(form, 'mvFileNumber', existing?.mvFileNumber),
+    engineNumber: nullableFormString(form, 'engineNumber', existing?.engineNumber),
+    chassisVinNumber: nullableFormString(form, 'chassisVinNumber', existing?.chassisVinNumber),
+    make: formString(form, 'make', existing?.make).trim(),
+    model: formString(form, 'model', existing?.model).trim(),
+    seriesVariant: nullableFormString(form, 'seriesVariant', existing?.seriesVariant),
     yearModel: formNumber(form, 'yearModel', existing?.yearModel ?? new Date().getFullYear()),
-    color: formString(form, 'color', existing?.color),
-    vehicleType: formString(form, 'vehicleType', existing?.vehicleType ?? 'Sedan'),
-    bodyType: formString(form, 'bodyType', existing?.bodyType),
-    fuelType: formString(form, 'fuelType', existing?.fuelType ?? 'Gasoline'),
+    color: nullableFormString(form, 'color', existing?.color),
+    vehicleType: nullableFormString(form, 'vehicleType', existing?.vehicleType ?? 'Sedan'),
+    bodyType: nullableFormString(form, 'bodyType', existing?.bodyType),
+    fuelType: nullableFormString(form, 'fuelType', existing?.fuelType ?? 'Gasoline'),
     passengerCapacity: formNumber(form, 'passengerCapacity', existing?.passengerCapacity ?? 4),
-    classification: formString(form, 'classification', existing?.classification ?? 'Private'),
-    grossWeight: formString(form, 'grossWeight', existing?.grossWeight),
+    classification: nullableFormString(form, 'classification', existing?.classification ?? 'Private'),
+    grossWeight: nullableFormNumber(form, 'grossWeight', existing?.grossWeight),
     currentOdometer: formNumber(form, 'currentOdometer', existing?.currentOdometer ?? 0),
     ownershipStatus: formString(form, 'ownershipStatus', existing?.ownershipStatus ?? 'Owned') as Vehicle['ownershipStatus'],
-    status: formString(form, 'status', existing?.status ?? 'Available') as VehicleStatus,
-    remarks: formString(form, 'remarks', existing?.remarks),
+    status: toApiVehicleStatus(formString(form, 'status', existing?.status ?? 'Available') as VehicleStatus),
+    remarks: nullableFormString(form, 'remarks', existing?.remarks),
   }
+}
+
+function toApiVehicleStatus(status: VehicleStatus): VehicleApiDto['status'] {
+  return status === 'Under Maintenance' ? 'UnderMaintenance' : status
 }
 
 function driverFromForm(form: FormData, existing?: Driver): Driver {
@@ -3868,6 +3929,37 @@ async function gravatarUrlFromEmail(email?: string) {
     .join('')
 
   return `https://www.gravatar.com/avatar/${hash}?s=160&d=404`
+}
+
+function SafeImage({
+  src,
+  alt,
+  fallback,
+}: {
+  src?: string | null
+  alt: string
+  fallback: React.ReactNode
+}) {
+  const displayUrl = displayableAssetUrl(src)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [displayUrl])
+
+  if (!displayUrl || failed) {
+    return <div className="image-fallback">{fallback}</div>
+  }
+
+  return (
+    <img
+      src={displayUrl}
+      alt={alt}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  )
 }
 
 function AvatarImage({ sources, fallback }: { sources: string[]; fallback: string }) {

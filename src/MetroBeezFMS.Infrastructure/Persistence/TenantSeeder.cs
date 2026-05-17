@@ -19,6 +19,20 @@ public static class TenantSeeder
         ("delivery", "Delivery/logistics", "📦", 100)
     ];
 
+    private static readonly (string Code, string Label, string Icon, int SortOrder)[] CleanPublicVehicleFeatures =
+    [
+        ("aircon", "Air conditioning", "AC", 10),
+        ("automatic", "Automatic transmission", "AT", 20),
+        ("manual", "Manual transmission", "MT", 30),
+        ("driver", "Driver available", "DR", 40),
+        ("self_drive", "Self-drive ready", "SD", 50),
+        ("fuel_efficient", "Fuel efficient", "FE", 60),
+        ("large_luggage", "Large luggage space", "LG", 70),
+        ("bluetooth", "Bluetooth audio", "BT", 80),
+        ("dashcam", "Dashcam", "DC", 90),
+        ("delivery", "Delivery/logistics", "DL", 100)
+    ];
+
     public static async Task SeedAsync(TenantDbContext dbContext, Guid tenantId, Guid ownerUserId, string companyName, CancellationToken cancellationToken = default)
     {
         if (await dbContext.CompanyProfiles.AnyAsync(cancellationToken))
@@ -273,7 +287,7 @@ public static class TenantSeeder
             ContactNumber = "+63 2 8555 0100"
         });
         dbContext.AddRange(vehicleA, vehicleB, driverA, driverB, renterA, renterB, renterC, bookingA, bookingB, bookingC, tripA, tripB, tripC, pmsA, pmsB);
-        foreach (var feature in PublicVehicleFeatures)
+        foreach (var feature in CleanPublicVehicleFeatures)
         {
             dbContext.VehicleFeatureDefinitions.Add(new VehicleFeatureDefinition
             {
