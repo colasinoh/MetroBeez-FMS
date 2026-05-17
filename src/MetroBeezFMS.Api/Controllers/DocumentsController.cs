@@ -53,7 +53,12 @@ public sealed class DocumentsController : ControllerBase
             _ => query
         };
 
-        return Ok(await query.OrderBy(x => x.ExpirationDate).ThenByDescending(x => x.UploadedAt).Select(x => x.ToDto()).ToListAsync(cancellationToken));
+        var documents = await query
+            .OrderBy(x => x.ExpirationDate)
+            .ThenByDescending(x => x.UploadedAt)
+            .ToListAsync(cancellationToken);
+
+        return Ok(await ToDocumentDtosAsync(documents, cancellationToken));
     }
 
     [HttpPost("upload")]
@@ -67,9 +72,10 @@ public sealed class DocumentsController : ControllerBase
         [FromForm] DateOnly? expirationDate,
         CancellationToken cancellationToken)
     {
-        if (file.Length == 0 || string.IsNullOrWhiteSpace(entityType) || string.IsNullOrWhiteSpace(documentType))
+        var fileValidationError = ValidateDocumentFile(file);
+        if (fileValidationError is not null || string.IsNullOrWhiteSpace(entityType) || string.IsNullOrWhiteSpace(documentType))
         {
-            return ValidationProblem("A file, entity type, entity id, and document type are required.");
+            return ValidationProblem(fileValidationError ?? "A file, entity type, entity id, and document type are required.");
         }
 
         if (_currentTenant.TenantId is null)
@@ -104,7 +110,7 @@ public sealed class DocumentsController : ControllerBase
 
         db.DocumentAttachments.Add(document);
         await db.SaveChangesAsync(cancellationToken);
-        return CreatedAtAction(nameof(List), new { entityType, entityId }, document.ToDto());
+        return CreatedAtAction(nameof(List), new { entityType, entityId }, await ToDocumentDtoAsync(document, cancellationToken));
     }
 
     [HttpDelete("{id:guid}")]
@@ -121,5 +127,40 @@ public sealed class DocumentsController : ControllerBase
         db.DocumentAttachments.Remove(document);
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    private async Task<IReadOnlyList<DocumentAttachmentDto>> ToDocumentDtosAsync(IEnumerable<DocumentAttachment> documents, CancellationToken cancellationToken)
+    {
+        var items = new List<DocumentAttachmentDto>();
+        foreach (var document in documents)
+        {
+            items.Add(await ToDocumentDtoAsync(document, cancellationToken));
+        }
+
+        return items;
+    }
+
+    private async Task<DocumentAttachmentDto> ToDocumentDtoAsync(DocumentAttachment document, CancellationToken cancellationToken)
+    {
+        var displayUrl = await _fileStorageService.GetDisplayUrlAsync(document.FileUrl, TimeSpan.FromMinutes(30), cancellationToken);
+        return document.ToDto(displayUrl);
+    }
+
+    private static string? ValidateDocumentFile(IFormFile file)
+    {
+        if (file.Length == 0)
+        {
+            return "Choose a non-empty document file.";
+        }
+
+        const long maxBytes = 20 * 1024 * 1024;
+        if (file.Length > maxBytes)
+        {
+            return "Use a document smaller than 20 MB.";
+        }
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var supported = extension is ".pdf" or ".jpg" or ".jpeg" or ".png" or ".webp" or ".doc" or ".docx" or ".xls" or ".xlsx";
+        return supported ? null : "Use a PDF, JPG, PNG, WebP, Word, or Excel file.";
     }
 }

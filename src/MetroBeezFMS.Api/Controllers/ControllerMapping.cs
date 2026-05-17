@@ -108,7 +108,7 @@ public static class ControllerMapping
             schedule.Notes);
     }
 
-    public static DocumentAttachmentDto ToDto(this DocumentAttachment document)
+    public static DocumentAttachmentDto ToDto(this DocumentAttachment document, string? displayUrl = null)
     {
         return new DocumentAttachmentDto(
             document.Id,
@@ -117,6 +117,7 @@ public static class ControllerMapping
             document.FileName,
             document.OriginalFileName,
             document.FileUrl,
+            displayUrl,
             document.ContentType,
             document.FileSize,
             document.DocumentType,

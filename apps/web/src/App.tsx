@@ -251,8 +251,6 @@ type DriverApiDto = {
 const authStorageKey = 'metrobeez.auth'
 const apiBaseUrl = ((import.meta.env.VITE_API_BASE_URL as string | undefined)
   ?? (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:5117' : '')).replace(/\/$/, '')
-const s3AssetRegion = ((import.meta.env.VITE_AWS_REGION as string | undefined) ?? 'ap-southeast-1').trim()
-const s3PublicBaseUrl = ((import.meta.env.VITE_S3_PUBLIC_BASE_URL as string | undefined) ?? '').replace(/\/$/, '')
 
 function loadStoredSession() {
   try {
@@ -295,7 +293,7 @@ async function postJson<TResponse>(path: string, body: unknown, token?: string) 
 
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(readApiError(text, response.statusText))
+    throw new Error(readApiError(text, response.statusText, response.status))
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
@@ -308,7 +306,7 @@ async function getJson<TResponse>(path: string, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(readApiError(text, response.statusText))
+    throw new Error(readApiError(text, response.statusText, response.status))
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
@@ -326,7 +324,7 @@ async function putJson<TResponse>(path: string, body: unknown, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(readApiError(text, response.statusText))
+    throw new Error(readApiError(text, response.statusText, response.status))
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
@@ -340,7 +338,7 @@ async function deleteJson(path: string, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(readApiError(text, response.statusText))
+    throw new Error(readApiError(text, response.statusText, response.status))
   }
 }
 
@@ -353,14 +351,24 @@ async function postForm<TResponse>(path: string, body: FormData, token?: string)
 
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(readApiError(text, response.statusText))
+    throw new Error(readApiError(text, response.statusText, response.status))
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
 }
 
-function readApiError(text: string, fallback: string) {
+function readApiError(text: string, fallback: string, status?: number) {
+  if (status === 413) {
+    return 'The file is too large for the server upload limit. Use a smaller JPG, PNG, or WebP file, or increase nginx client_max_body_size.'
+  }
+
   if (!text) return fallback
+  if (/<html[\s>]|<!doctype html/i.test(text)) {
+    return fallback === 'Payload Too Large'
+      ? 'The file is too large for the server upload limit.'
+      : fallback
+  }
+
   try {
     const payload = JSON.parse(text) as { detail?: string; title?: string; errors?: Record<string, string[]> }
     if (payload.detail) return payload.detail
@@ -382,6 +390,7 @@ async function uploadDocumentFromForm(form: FormData, session: AuthSession | nul
   if (!(file instanceof File) || file.size === 0) {
     throw new Error('Choose the document file to upload.')
   }
+  validateDocumentFile(file)
 
   const entityType = formString(form, 'entityType')
   const entityId = formString(form, 'entityId')
@@ -413,6 +422,7 @@ async function uploadPhotoFromForm(form: FormData, session: AuthSession | null) 
   if (!(file instanceof File) || file.size === 0) {
     throw new Error('Choose an image file to upload.')
   }
+  validateBrowserImage(file)
 
   const entityType = formString(form, 'entityType')
   const entityId = formString(form, 'entityId')
@@ -425,10 +435,38 @@ async function uploadPhotoFromForm(form: FormData, session: AuthSession | null) 
   upload.append('entityType', entityType)
   upload.append('entityId', entityId)
   upload.append('caption', formString(form, 'caption'))
-  upload.append('isPublic', form.get('isPublic') === 'on' ? 'true' : 'false')
+  upload.append('isPublic', 'false')
   upload.append('displayOrder', formString(form, 'displayOrder', '0'))
 
   return postForm<PhotoItem>('/api/photos/upload', upload, session.token)
+}
+
+function validateBrowserImage(file: File) {
+  const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  const supportedExtensions = new Set(['jpg', 'jpeg', 'png', 'webp'])
+  const isSupported = supportedTypes.has(file.type) || (extension ? supportedExtensions.has(extension) : false)
+  if (!isSupported) {
+    throw new Error('Use a JPG, PNG, or WebP image. HEIC photos need to be converted first so browsers can preview them.')
+  }
+
+  const maxBytes = 8 * 1024 * 1024
+  if (file.size > maxBytes) {
+    throw new Error('Use an image smaller than 8 MB.')
+  }
+}
+
+function validateDocumentFile(file: File) {
+  const maxBytes = 20 * 1024 * 1024
+  if (file.size > maxBytes) {
+    throw new Error('Use a document smaller than 20 MB.')
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  const supportedExtensions = new Set(['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx'])
+  if (!extension || !supportedExtensions.has(extension)) {
+    throw new Error('Use a PDF, JPG, PNG, WebP, Word, or Excel file.')
+  }
 }
 
 const initialAuditEntries: AuditEntry[] = [
@@ -1829,7 +1867,7 @@ function MaintenancePage({
       const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
       setDocuments((current) => [uploaded, ...current])
       setUploadTarget(null)
-      showToast({ title: 'PMS document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+      showToast({ title: 'PMS document uploaded', detail: 'The document was saved to this schedule.' })
     } catch (error) {
       showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
     } finally {
@@ -1907,7 +1945,7 @@ function DocumentsPage({
       const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
       setDocuments((current) => [uploaded, ...current])
       setModalOpen(false)
-      showToast({ title: 'Document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+      showToast({ title: 'Document uploaded', detail: 'The document was saved to this record.' })
     } catch (error) {
       showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
     } finally {
@@ -1932,8 +1970,8 @@ function DocumentsPage({
               <td>{dateText(doc.uploadedAt)}</td>
               <td><Badge status={doc.expirationDate ? (daysUntil(doc.expirationDate) < 0 ? 'Expired' : daysUntil(doc.expirationDate) <= 7 ? 'Due Soon' : 'Clear') : 'Clear'} /></td>
               <td className="table-actions">
-                {doc.fileUrl && doc.fileUrl !== '#'
-                  ? <a className="icon-button" href={doc.fileUrl} target="_blank" rel="noreferrer" title="Open document"><FileText size={16} /></a>
+                {displayableAssetUrl(doc.displayUrl)
+                  ? <a className="icon-button" href={displayableAssetUrl(doc.displayUrl)} target="_blank" rel="noreferrer" title="Open document"><FileText size={16} /></a>
                   : <span className="muted-action">Stored</span>}
               </td>
             </tr>
@@ -2060,7 +2098,7 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
   const customFeatureText = (listing: PublicVehicleListing) =>
     listing.features
       .filter((feature) => feature.isCustom)
-      .map((feature) => `${feature.icon || '✨'} | ${feature.label}`)
+      .map((feature) => `${feature.icon || '+'} | ${feature.label}`)
       .join('\n')
 
   return (
@@ -2076,7 +2114,11 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
               <span>Enable public page</span>
             </label>
             {model.settings.publicUrl && (
-              <p className="muted-line">Public URL: <a href={model.settings.publicUrl} target="_blank" rel="noreferrer">{model.settings.publicUrl}</a></p>
+              <div className="public-page-link-row">
+                <span>Public page</span>
+                {model.settings.slug && <code>/{model.settings.slug}</code>}
+                <a className="secondary-button compact-button" href={model.settings.publicUrl} target="_blank" rel="noreferrer">Open</a>
+              </div>
             )}
             <Field label="Headline" name="headline" defaultValue={model.settings.headline || ''} />
             <label className="field">
@@ -2098,7 +2140,7 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
                   <header>
                     <div>
                       <h2>{listing.vehicleLabel}</h2>
-                      <p>{listing.status} · {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
+                      <p>{listing.status} - {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
                     </div>
                     <label className="toggle-row">
                       <input name="isPublished" type="checkbox" defaultChecked={listing.isPublished} disabled={listing.publicPhotoCount === 0} />
@@ -2111,7 +2153,7 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
 
                   <div className="public-photo-strip">
                     {listing.photos.map((photo) => {
-                      const src = displayableAssetUrl(photo.displayUrl || photo.fileUrl)
+                      const src = displayableAssetUrl(photo.displayUrl)
                       return (
                         <label className="public-photo-choice" key={photo.id}>
                           <span>{src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={18} />}</span>
@@ -2154,7 +2196,7 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
 
                   <label className="field">
                     <span>Custom features</span>
-                    <textarea name="customFeatures" rows={3} defaultValue={customFeatureText(listing)} placeholder="✨ | Child seat available" />
+                    <textarea name="customFeatures" rows={3} defaultValue={customFeatureText(listing)} placeholder="+ | Child seat available" />
                   </label>
 
                   <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save listing</button></div>
@@ -2426,6 +2468,23 @@ function SettingsPage({
 
   const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
+    if (file) {
+      try {
+        validateBrowserImage(file)
+      } catch (error) {
+        event.currentTarget.value = ''
+        showToast({ title: 'Photo not selected', detail: error instanceof Error ? error.message : 'Choose a different image.' })
+        setPhotoPreviewUrl((current) => {
+          if (current) {
+            URL.revokeObjectURL(current)
+          }
+
+          return ''
+        })
+        return
+      }
+    }
+
     setPhotoPreviewUrl((current) => {
       if (current) {
         URL.revokeObjectURL(current)
@@ -2456,6 +2515,7 @@ function SettingsPage({
       let uploadedPhotoUrl = userProfile.profilePhotoUrl || ''
       const profilePhotoFile = form.get('profilePhotoFile')
       if (profilePhotoFile instanceof File && profilePhotoFile.size > 0) {
+        validateBrowserImage(profilePhotoFile)
         const uploadForm = new FormData()
         uploadForm.append('file', profilePhotoFile)
         const uploadedProfile = await postForm<UserProfile>('/api/settings/profile-photo', uploadForm, session.token)
@@ -2541,7 +2601,7 @@ function SettingsPage({
             </span>
             <label className="field">
               <span><Camera size={14} /> Profile photo</span>
-              <input name="profilePhotoFile" type="file" accept="image/*" onChange={handleProfilePhotoChange} />
+              <input name="profilePhotoFile" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleProfilePhotoChange} />
             </label>
           </div>
           <div className="form-grid">
@@ -3066,10 +3126,7 @@ function DocumentForm({
         <>
           <input type="hidden" name="entityType" value={lockedEntity.entityType} />
           <input type="hidden" name="entityId" value={lockedEntity.entityId} />
-          <label className="field full">
-            <span>Related record</span>
-            <input value={`${lockedEntity.entityType} - ${lockedEntity.label}`} readOnly />
-          </label>
+          <p className="muted-line full">{lockedEntity.label}</p>
         </>
       ) : (
         <>
@@ -3096,7 +3153,8 @@ function DocumentForm({
       <Field label="Expiration date" name="expirationDate" type="date" defaultValue={defaultValues?.expirationDate} />
       <label className="field full">
         <span>Document file</span>
-        <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,image/*,application/pdf" required />
+        <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,application/pdf" required />
+        <small>PDF, JPG, PNG, WebP, Word, or Excel up to 20 MB.</small>
       </label>
       <button className="primary-button full" type="submit"><Upload size={18} /> {submitLabel}</button>
     </form>
@@ -3171,7 +3229,7 @@ function EntityDocumentsPanel({
       const uploaded = await uploadDocumentFromForm(new FormData(event.currentTarget), session)
       setDocuments((current) => [uploaded, ...current])
       setUploadOpen(false)
-      showToast({ title: 'Document uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+      showToast({ title: 'Document uploaded', detail: 'The document was saved to this record.' })
     } catch (error) {
       showToast({ title: 'Upload failed', detail: error instanceof Error ? error.message : 'Please try again.' })
     } finally {
@@ -3191,8 +3249,8 @@ function EntityDocumentsPanel({
               <strong>{doc.documentType}</strong>
               <small>{doc.originalFileName}{doc.expirationDate ? ` - expires ${dateText(doc.expirationDate)}` : ''}</small>
             </span>
-            {doc.fileUrl && doc.fileUrl !== '#'
-              ? <a className="secondary-button compact-button" href={doc.fileUrl} target="_blank" rel="noreferrer">Open</a>
+            {displayableAssetUrl(doc.displayUrl)
+              ? <a className="secondary-button compact-button" href={displayableAssetUrl(doc.displayUrl)} target="_blank" rel="noreferrer">Open</a>
               : <Badge status={doc.expirationDate ? (daysUntil(doc.expirationDate) <= 7 ? 'Due Soon' : 'Clear') : 'Clear'} />}
           </li>
         ))}
@@ -3226,6 +3284,7 @@ function EntityPhotosPanel({
   const [photos, setPhotos] = useState<PhotoItem[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
@@ -3236,6 +3295,7 @@ function EntityPhotosPanel({
 
     let active = true
     setLoading(true)
+    setLoadError('')
     getJson<PhotoItem[]>(`/api/photos?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`, session.token)
       .then((items) => {
         if (active) {
@@ -3244,7 +3304,9 @@ function EntityPhotosPanel({
       })
       .catch((error) => {
         if (active) {
-          showToast({ title: 'Photos not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+          const message = error instanceof Error ? error.message : 'Photos are temporarily unavailable.'
+          setLoadError(message)
+          showToast({ title: 'Photos unavailable', detail: message })
         }
       })
       .finally(() => {
@@ -3265,29 +3327,11 @@ function EntityPhotosPanel({
       const uploaded = await uploadPhotoFromForm(new FormData(event.currentTarget), session)
       setPhotos((current) => [uploaded, ...current].sort((a, b) => a.displayOrder - b.displayOrder))
       setUploadOpen(false)
-      showToast({ title: 'Photo uploaded', detail: `${uploaded.originalFileName} was saved to S3.` })
+      showToast({ title: 'Photo uploaded', detail: 'The photo was saved to this record.' })
     } catch (error) {
       showToast({ title: 'Photo not uploaded', detail: error instanceof Error ? error.message : 'Please try again.' })
     } finally {
       setUploading(false)
-    }
-  }
-
-  const updatePhoto = async (photo: PhotoItem, event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!session?.token) return
-
-    const form = new FormData(event.currentTarget)
-    try {
-      const updated = await putJson<PhotoItem>(`/api/photos/${photo.id}`, {
-        isPublic: form.get('isPublic') === 'on',
-        caption: formString(form, 'caption') || null,
-        displayOrder: formNumber(form, 'displayOrder', photo.displayOrder),
-      }, session.token)
-      setPhotos((current) => current.map((item) => item.id === photo.id ? updated : item).sort((a, b) => a.displayOrder - b.displayOrder))
-      showToast({ title: 'Photo updated', detail: 'Display settings were saved.' })
-    } catch (error) {
-      showToast({ title: 'Photo not updated', detail: error instanceof Error ? error.message : 'Please try again.' })
     }
   }
 
@@ -3297,7 +3341,7 @@ function EntityPhotosPanel({
     try {
       await deleteJson(`/api/photos/${photo.id}`, session.token)
       setPhotos((current) => current.filter((item) => item.id !== photo.id))
-      showToast({ title: 'Photo removed', detail: `${photo.originalFileName} was removed from this record.` })
+      showToast({ title: 'Photo removed', detail: 'The photo was removed from this record.' })
     } catch (error) {
       showToast({ title: 'Photo not removed', detail: error instanceof Error ? error.message : 'Please try again.' })
     }
@@ -3309,59 +3353,43 @@ function EntityPhotosPanel({
       action={<button className="secondary-button" type="button" onClick={() => setUploadOpen(true)}><Images size={16} /> Add photo</button>}
     >
       {loading && <p className="muted-line">Loading photos...</p>}
-      {!loading && photos.length === 0 && <EmptyState title="No photos yet" detail={`Upload ${entityType.toLowerCase()} photos for profiles, documents, and public listings.`} />}
+      {!loading && loadError && <EmptyState title="Photos are not ready" detail={loadError} />}
+      {!loading && !loadError && photos.length === 0 && <EmptyState title="No photos yet" detail={`Add ${entityType.toLowerCase()} photos here. Vehicle photos can be selected later for the public page.`} />}
       <div className="photo-grid">
         {photos.map((photo) => {
-          const src = displayableAssetUrl(photo.displayUrl || photo.fileUrl)
+          const src = displayableAssetUrl(photo.displayUrl)
           return (
-            <form className="photo-card" key={photo.id} onSubmit={(event) => updatePhoto(photo, event)}>
+            <article className="photo-card" key={photo.id}>
               <div className="photo-thumb">
                 {src ? <img src={src} alt={photo.caption || photo.originalFileName} /> : <Camera size={24} />}
               </div>
               <div className="photo-card-body">
-                <span className="photo-name">{photo.originalFileName}</span>
-                <label className="field compact-field">
-                  <span>Caption</span>
-                  <input name="caption" defaultValue={photo.caption || ''} />
-                </label>
-                <div className="photo-controls">
-                  <label className="toggle-row">
-                    <input name="isPublic" type="checkbox" defaultChecked={photo.isPublic} />
-                    <span>{entityType === 'Vehicle' ? 'Can show on public page' : 'Public photo'}</span>
-                  </label>
-                  <label className="field compact-field order-field">
-                    <span>Order</span>
-                    <input name="displayOrder" type="number" defaultValue={String(photo.displayOrder)} />
-                  </label>
-                </div>
+                <span className="photo-name">{photo.caption || photo.originalFileName}</span>
+                {photo.isPublic && <Badge status="Public" />}
                 <div className="photo-actions">
-                  <button className="secondary-button compact-button" type="submit"><Save size={15} /> Save</button>
                   <button className="icon-button danger" type="button" title="Remove photo" onClick={() => removePhoto(photo)}><Trash2 size={15} /></button>
                 </div>
               </div>
-            </form>
+            </article>
           )
         })}
       </div>
-      <Modal title={`Upload ${entityType.toLowerCase()} photo`} open={uploadOpen} onClose={() => setUploadOpen(false)}>
-        <form className="modal-form" onSubmit={upload}>
+      <Modal title="Add photo" open={uploadOpen} onClose={() => setUploadOpen(false)}>
+        <form className="modal-form photo-upload-form" onSubmit={upload}>
           <input type="hidden" name="entityType" value={entityType} />
           <input type="hidden" name="entityId" value={entityId} />
+          <input type="hidden" name="displayOrder" value="0" />
           <label className="field full">
-            <span>Related record</span>
-            <input value={`${entityType} - ${entityLabel}`} readOnly />
+            <span>Image</span>
+            <input name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
+            <small>JPG, PNG, or WebP up to 8 MB.</small>
           </label>
           <label className="field full">
-            <span>Photo file</span>
-            <input name="file" type="file" accept="image/*" required />
+            <span>Caption</span>
+            <input name="caption" placeholder={`${entityType} photo`} />
           </label>
-          <Field label="Caption" name="caption" />
-          <Field label="Display order" name="displayOrder" type="number" defaultValue="0" />
-          <label className="toggle-row full">
-            <input name="isPublic" type="checkbox" />
-            <span>{entityType === 'Vehicle' ? 'Allow this photo on the public page' : 'Mark as public photo'}</span>
-          </label>
-          <button className="primary-button full" type="submit" disabled={uploading}><Upload size={18} /> {uploading ? 'Uploading...' : 'Upload photo'}</button>
+          <p className="muted-line full">{entityLabel}</p>
+          <button className="primary-button full" type="submit" disabled={uploading}><Upload size={18} /> {uploading ? 'Uploading...' : 'Add photo'}</button>
         </form>
       </Modal>
     </Panel>
@@ -3575,7 +3603,7 @@ function parseCustomFeatures(value: string) {
       const [rawIcon, ...labelParts] = trimmed.split('|')
       const label = labelParts.length > 0 ? labelParts.join('|').trim() : trimmed
       return {
-        icon: labelParts.length > 0 ? rawIcon.trim() || '✨' : '✨',
+        icon: labelParts.length > 0 ? rawIcon.trim() || '+' : '+',
         label,
         displayOrder: 1000 + index,
       }
@@ -3806,7 +3834,7 @@ function normalizeUserProfile(profile: Partial<UserProfile>, session?: AuthSessi
 }
 
 function avatarSources(profile: UserProfile, clientGravatarUrl: string) {
-  return [profile.profilePhotoDisplayUrl, profile.profilePhotoUrl, profile.gravatarUrl, clientGravatarUrl]
+  return [profile.profilePhotoDisplayUrl, profile.gravatarUrl, clientGravatarUrl]
     .map(displayableAssetUrl)
     .filter(Boolean) as string[]
 }
@@ -3823,28 +3851,6 @@ function displayableAssetUrl(value?: string | null) {
 
   if (rawValue.startsWith('/')) {
     return `${apiBaseUrl}${rawValue}`
-  }
-
-  if (rawValue.startsWith('s3://')) {
-    const withoutScheme = rawValue.slice('s3://'.length)
-    const slashIndex = withoutScheme.indexOf('/')
-    if (slashIndex <= 0) {
-      return ''
-    }
-
-    const bucket = withoutScheme.slice(0, slashIndex)
-    let key = withoutScheme.slice(slashIndex + 1)
-    if (s3PublicBaseUrl) {
-      const prefixMatch = s3PublicBaseUrl.match(/\/([^/]+)$/)
-      const trailingPrefix = prefixMatch?.[1]
-      if (trailingPrefix && key.startsWith(`${trailingPrefix}/`)) {
-        key = key.slice(trailingPrefix.length + 1)
-      }
-
-      return `${s3PublicBaseUrl}/${encodeURI(key)}`
-    }
-
-    return `https://${bucket}.s3.${s3AssetRegion}.amazonaws.com/${encodeURI(key)}`
   }
 
   return ''

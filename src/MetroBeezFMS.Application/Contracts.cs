@@ -267,6 +267,7 @@ public sealed record DocumentAttachmentDto(
     string FileName,
     string OriginalFileName,
     string FileUrl,
+    string? DisplayUrl,
     string? ContentType,
     long FileSize,
     string DocumentType,

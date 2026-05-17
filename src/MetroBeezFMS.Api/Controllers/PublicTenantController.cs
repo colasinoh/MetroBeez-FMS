@@ -206,7 +206,7 @@ public sealed class PublicTenantController : ControllerBase
             return new PublicVehicleFeatureDto(feature.FeatureDefinitionId, feature.FeatureDefinition.Label, feature.FeatureDefinition.Icon, false, feature.DisplayOrder);
         }
 
-        return new PublicVehicleFeatureDto(null, feature.CustomLabel ?? "Custom feature", string.IsNullOrWhiteSpace(feature.CustomIcon) ? "✨" : feature.CustomIcon, true, feature.DisplayOrder);
+        return new PublicVehicleFeatureDto(null, feature.CustomLabel ?? "Custom feature", string.IsNullOrWhiteSpace(feature.CustomIcon) ? "+" : feature.CustomIcon, true, feature.DisplayOrder);
     }
 
     private static PublicBookingInquiryDto ToInquiryDto(PublicBookingInquiry inquiry)

@@ -172,7 +172,7 @@ public sealed class PublicPageManagementController : ControllerBase
             listing.Features.Add(new PublicVehicleFeature
             {
                 CustomLabel = custom.Label.Trim(),
-                CustomIcon = TrimToNull(custom.Icon) ?? "✨",
+                CustomIcon = TrimToNull(custom.Icon) ?? "+",
                 DisplayOrder = custom.DisplayOrder
             });
         }
@@ -315,7 +315,7 @@ public sealed class PublicPageManagementController : ControllerBase
         return new PublicVehicleFeatureDto(
             null,
             feature.CustomLabel ?? "Custom feature",
-            string.IsNullOrWhiteSpace(feature.CustomIcon) ? "✨" : feature.CustomIcon,
+            string.IsNullOrWhiteSpace(feature.CustomIcon) ? "+" : feature.CustomIcon,
             true,
             feature.DisplayOrder);
     }

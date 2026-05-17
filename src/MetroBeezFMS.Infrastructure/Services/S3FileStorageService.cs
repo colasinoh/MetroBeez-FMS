@@ -57,9 +57,7 @@ public sealed class S3FileStorageService : IFileStorageService
 
         await _s3Client.PutObjectAsync(request, cancellationToken);
 
-        var fileUrl = !string.IsNullOrWhiteSpace(_publicBaseUrl)
-            ? BuildPublicUrl(key)
-            : $"s3://{_bucketName}/{key}";
+        var fileUrl = $"s3://{_bucketName}/{key}";
 
         return new StoredFile(key, originalFileName, fileUrl, contentType, stream.CanSeek ? stream.Length : 0);
     }
@@ -69,6 +67,18 @@ public sealed class S3FileStorageService : IFileStorageService
         if (string.IsNullOrWhiteSpace(fileUrl))
         {
             return Task.FromResult<string?>(null);
+        }
+
+        var publicBaseKey = TryGetKeyFromPublicBaseUrl(fileUrl);
+        if (publicBaseKey is not null)
+        {
+            return Task.FromResult<string?>(BuildPreSignedUrl(_bucketName, publicBaseKey, expiresIn));
+        }
+
+        var bucketUrlKey = TryGetKeyFromBucketUrl(fileUrl);
+        if (bucketUrlKey is not null)
+        {
+            return Task.FromResult<string?>(BuildPreSignedUrl(_bucketName, bucketUrlKey, expiresIn));
         }
 
         if (Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri)
@@ -85,11 +95,11 @@ public sealed class S3FileStorageService : IFileStorageService
         }
 
         var (bucket, key) = parsed.Value;
-        if (!string.IsNullOrWhiteSpace(_publicBaseUrl))
-        {
-            return Task.FromResult<string?>(BuildPublicUrl(key));
-        }
+        return Task.FromResult<string?>(BuildPreSignedUrl(bucket, key, expiresIn));
+    }
 
+    private string BuildPreSignedUrl(string bucket, string key, TimeSpan? expiresIn)
+    {
         var request = new GetPreSignedUrlRequest
         {
             BucketName = bucket,
@@ -97,7 +107,7 @@ public sealed class S3FileStorageService : IFileStorageService
             Expires = DateTime.UtcNow.Add(expiresIn ?? TimeSpan.FromMinutes(30))
         };
 
-        return Task.FromResult<string?>(_s3Client.GetPreSignedURL(request));
+        return _s3Client.GetPreSignedURL(request);
     }
 
     public async Task EnsureTenantRootAsync(string tenantStorageRoot, CancellationToken cancellationToken = default)
@@ -173,6 +183,63 @@ public sealed class S3FileStorageService : IFileStorageService
         }
 
         return $"{baseUrl}/{key}";
+    }
+
+    private string? TryGetKeyFromPublicBaseUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(_publicBaseUrl)
+            || !Uri.TryCreate(_publicBaseUrl.TrimEnd('/'), UriKind.Absolute, out var baseUri)
+            || !Uri.TryCreate(value, UriKind.Absolute, out var valueUri)
+            || !baseUri.Scheme.Equals(valueUri.Scheme, StringComparison.OrdinalIgnoreCase)
+            || !baseUri.Host.Equals(valueUri.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var basePath = baseUri.AbsolutePath.Trim('/');
+        var valuePath = Uri.UnescapeDataString(valueUri.AbsolutePath.Trim('/'));
+        if (!string.IsNullOrWhiteSpace(basePath))
+        {
+            if (!valuePath.StartsWith($"{basePath}/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            valuePath = valuePath[(basePath.Length + 1)..];
+        }
+
+        return string.IsNullOrWhiteSpace(_keyPrefix) || valuePath.StartsWith($"{_keyPrefix}/", StringComparison.OrdinalIgnoreCase)
+            ? valuePath
+            : $"{_keyPrefix}/{valuePath}";
+    }
+
+    private string? TryGetKeyFromBucketUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !(uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        var host = uri.Host;
+        var virtualHostedPrefix = $"{_bucketName}.s3.";
+        if (host.StartsWith(virtualHostedPrefix, StringComparison.OrdinalIgnoreCase)
+            || host.Equals($"{_bucketName}.s3.amazonaws.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var key = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/'));
+            return string.IsNullOrWhiteSpace(key) ? null : key;
+        }
+
+        if (host.StartsWith("s3.", StringComparison.OrdinalIgnoreCase)
+            || host.Equals("s3.amazonaws.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/'));
+            var bucketPrefix = $"{_bucketName}/";
+            return path.StartsWith(bucketPrefix, StringComparison.OrdinalIgnoreCase) ? path[bucketPrefix.Length..] : null;
+        }
+
+        return null;
     }
 
     private (string Bucket, string Key)? ParseS3Uri(string value)

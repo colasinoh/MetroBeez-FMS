@@ -118,6 +118,7 @@ export type DocumentAttachment = {
   fileName?: string
   originalFileName: string
   fileUrl: string
+  displayUrl?: string
   contentType?: string
   fileSize?: number
   documentType: string

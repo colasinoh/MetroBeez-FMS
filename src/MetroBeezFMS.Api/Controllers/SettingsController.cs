@@ -88,9 +88,10 @@ public sealed class SettingsController : ControllerBase
     [RequestSizeLimit(5_000_000)]
     public async Task<ActionResult<UserProfileDto>> UploadProfilePhoto([FromForm] IFormFile file, CancellationToken cancellationToken)
     {
-        if (file.Length == 0 || file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) != true)
+        var fileValidationError = ValidateProfilePhoto(file);
+        if (fileValidationError is not null)
         {
-            return ValidationProblem("A non-empty image file is required.");
+            return ValidationProblem(fileValidationError);
         }
 
         var user = await CurrentUserAsync();
@@ -123,6 +124,29 @@ public sealed class SettingsController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(userId, out var id) ? await _userManager.FindByIdAsync(id.ToString()) : null;
+    }
+
+    private static string? ValidateProfilePhoto(IFormFile file)
+    {
+        if (file.Length == 0)
+        {
+            return "Choose a non-empty image file.";
+        }
+
+        const long maxBytes = 8 * 1024 * 1024;
+        if (file.Length > maxBytes)
+        {
+            return "Use an image smaller than 8 MB.";
+        }
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var contentType = file.ContentType?.ToLowerInvariant();
+        var supported = contentType is "image/jpeg" or "image/png" or "image/webp"
+            || extension is ".jpg" or ".jpeg" or ".png" or ".webp";
+
+        return supported
+            ? null
+            : "Use a JPG, PNG, or WebP image. HEIC photos need to be converted first so browsers can preview them.";
     }
 
     private async Task<UserProfileDto> ToProfileDtoAsync(AppUser user, CancellationToken cancellationToken)

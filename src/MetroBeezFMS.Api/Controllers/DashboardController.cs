@@ -59,7 +59,7 @@ public sealed class DashboardController : ControllerBase
                 .Where(x => x.ExpirationDate != null && x.ExpirationDate <= thirtyDays)
                 .OrderBy(x => x.ExpirationDate)
                 .Take(8)
-                .Select(x => x.ToDto())
+                .Select(x => x.ToDto(null))
                 .ToListAsync(cancellationToken),
             DriverActivity: await db.Notifications
                 .OrderByDescending(x => x.CreatedAt)

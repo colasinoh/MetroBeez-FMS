@@ -4,6 +4,7 @@ using MetroBeezFMS.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MetroBeezFMS.Api.Controllers;
 
@@ -39,12 +40,23 @@ public sealed class PhotosController : ControllerBase
         }
 
         await using var db = await _tenantDbContextFactory.CreateAsync(cancellationToken);
-        var photos = await db.DocumentAttachments
-            .AsNoTracking()
-            .Where(x => x.IsPhoto && x.EntityType == normalizedEntityType && x.EntityId == entityId)
-            .OrderBy(x => x.DisplayOrder)
-            .ThenByDescending(x => x.UploadedAt)
-            .ToListAsync(cancellationToken);
+        List<DocumentAttachment> photos;
+        try
+        {
+            photos = await db.DocumentAttachments
+                .AsNoTracking()
+                .Where(x => x.IsPhoto && x.EntityType == normalizedEntityType && x.EntityId == entityId)
+                .OrderBy(x => x.DisplayOrder)
+                .ThenByDescending(x => x.UploadedAt)
+                .ToListAsync(cancellationToken);
+        }
+        catch (PostgresException exception) when (IsMissingPhotoMigration(exception))
+        {
+            return Problem(
+                "This tenant database needs the latest photo/public-page migration before photos can be used.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Tenant database migration required");
+        }
 
         return Ok(await ToPhotoDtosAsync(photos, cancellationToken));
     }
@@ -67,9 +79,10 @@ public sealed class PhotosController : ControllerBase
             return ValidationProblem("Photos are currently supported for vehicles and drivers.");
         }
 
-        if (file.Length == 0 || file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) != true)
+        var fileValidationError = ValidatePhotoFile(file);
+        if (fileValidationError is not null)
         {
-            return ValidationProblem("A non-empty image file is required.");
+            return ValidationProblem(fileValidationError);
         }
 
         if (_currentTenant.TenantId is null)
@@ -115,7 +128,17 @@ public sealed class PhotosController : ControllerBase
         };
 
         db.DocumentAttachments.Add(photo);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (PostgresException exception) when (IsMissingPhotoMigration(exception))
+        {
+            return Problem(
+                "This tenant database needs the latest photo/public-page migration before photos can be used.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Tenant database migration required");
+        }
 
         return CreatedAtAction(nameof(List), new { entityType = normalizedEntityType, entityId }, await ToPhotoDtoAsync(photo, cancellationToken));
     }
@@ -163,6 +186,34 @@ public sealed class PhotosController : ControllerBase
             "driver" or "drivers" => "Driver",
             _ => null
         };
+    }
+
+    private static string? ValidatePhotoFile(IFormFile file)
+    {
+        if (file.Length == 0)
+        {
+            return "Choose a non-empty image file.";
+        }
+
+        const long maxBytes = 8 * 1024 * 1024;
+        if (file.Length > maxBytes)
+        {
+            return "Use an image smaller than 8 MB.";
+        }
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var contentType = file.ContentType?.ToLowerInvariant();
+        var supported = contentType is "image/jpeg" or "image/png" or "image/webp"
+            || extension is ".jpg" or ".jpeg" or ".png" or ".webp";
+
+        return supported
+            ? null
+            : "Use a JPG, PNG, or WebP image. HEIC photos need to be converted first so browsers can preview them.";
+    }
+
+    private static bool IsMissingPhotoMigration(PostgresException exception)
+    {
+        return exception.SqlState is PostgresErrorCodes.UndefinedColumn or PostgresErrorCodes.UndefinedTable;
     }
 
     private async Task<IReadOnlyList<PhotoDto>> ToPhotoDtosAsync(IEnumerable<DocumentAttachment> photos, CancellationToken cancellationToken)
