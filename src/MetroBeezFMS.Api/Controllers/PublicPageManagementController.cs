@@ -304,25 +304,19 @@ public sealed class PublicPageManagementController : ControllerBase
 
     private async Task<IReadOnlyList<PhotoDto>> ToPhotoDtosAsync(IEnumerable<DocumentAttachment> photos, CancellationToken cancellationToken)
     {
-        var items = new List<PhotoDto>();
-        foreach (var photo in photos)
-        {
-            items.Add(new PhotoDto(
-                photo.Id,
-                photo.EntityType,
-                photo.EntityId,
-                photo.OriginalFileName,
-                photo.FileUrl,
-                await _fileStorageService.GetDisplayUrlAsync(photo.FileUrl, TimeSpan.FromMinutes(30), cancellationToken),
-                photo.ContentType,
-                photo.FileSize,
-                photo.IsPublic,
-                photo.Caption,
-                photo.DisplayOrder,
-                photo.UploadedAt));
-        }
-
-        return items;
+        return await Task.WhenAll(photos.Select(async photo => new PhotoDto(
+            photo.Id,
+            photo.EntityType,
+            photo.EntityId,
+            photo.OriginalFileName,
+            photo.FileUrl,
+            await _fileStorageService.GetDisplayUrlAsync(photo.FileUrl, TimeSpan.FromMinutes(30), cancellationToken),
+            photo.ContentType,
+            photo.FileSize,
+            photo.IsPublic,
+            photo.Caption,
+            photo.DisplayOrder,
+            photo.UploadedAt)));
     }
 
     private static PublicVehicleFeatureDto ToFeatureDto(PublicVehicleFeature feature)

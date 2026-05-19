@@ -186,17 +186,11 @@ public sealed class PublicTenantController : ControllerBase
 
     private async Task<IReadOnlyList<PublicTenantPhotoDto>> ToPublicPhotoDtosAsync(IEnumerable<DocumentAttachment> photos, CancellationToken cancellationToken)
     {
-        var items = new List<PublicTenantPhotoDto>();
-        foreach (var photo in photos)
-        {
-            items.Add(new PublicTenantPhotoDto(
-                photo.Id,
-                await _fileStorageService.GetDisplayUrlAsync(photo.FileUrl, TimeSpan.FromMinutes(30), cancellationToken),
-                photo.Caption,
-                photo.DisplayOrder));
-        }
-
-        return items;
+        return await Task.WhenAll(photos.Select(async photo => new PublicTenantPhotoDto(
+            photo.Id,
+            await _fileStorageService.GetDisplayUrlAsync(photo.FileUrl, TimeSpan.FromMinutes(30), cancellationToken),
+            photo.Caption,
+            photo.DisplayOrder)));
     }
 
     private static PublicVehicleFeatureDto ToFeatureDto(PublicVehicleFeature feature)

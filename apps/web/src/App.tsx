@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Camera,
   Car,
+  ChevronLeft,
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
@@ -22,6 +23,7 @@ import {
   LayoutDashboard,
   LogOut,
   MailCheck,
+  Maximize2,
   Menu,
   Moon,
   Plus,
@@ -248,17 +250,153 @@ type DriverApiDto = {
   notes?: string | null
 }
 
+type RenterApiDto = {
+  id: string
+  fullName: string
+  address?: string | null
+  contactNumber?: string | null
+  email?: string | null
+  validIdType?: string | null
+  validIdNumber?: string | null
+  driverLicenseNumber?: string | null
+  emergencyContact?: string | null
+  isWatchlisted: boolean
+  notes?: string | null
+}
+
+type ApiBookingType = 'SelfDrive' | 'WithDriver' | 'DeliveryLogistics' | 'CorporateLease'
+type ApiRateType = 'Daily' | 'Weekly' | 'Monthly' | 'Custom'
+type ApiTripType = 'Rental' | 'Delivery' | 'PrivateBooking' | 'Corporate' | 'Other'
+type ApiMaintenanceStatus = 'Upcoming' | 'DueSoon' | 'Overdue' | 'Completed'
+type ApiNotificationType = 'Info' | 'Booking' | 'PmsReminder' | 'DocumentExpiry' | 'DriverLicenseExpiry' | 'Warning'
+
+type BookingApiDto = {
+  id: string
+  referenceNumber: string
+  renterId: string
+  vehicleId: string
+  driverId?: string | null
+  renterName?: string | null
+  vehicleLabel?: string | null
+  driverName?: string | null
+  bookingType: ApiBookingType
+  startDateTime: string
+  endDateTime: string
+  pickupLocation?: string | null
+  returnLocation?: string | null
+  rateType: ApiRateType
+  rateAmount: number
+  securityDeposit: number
+  paymentStatus: Booking['paymentStatus']
+  bookingStatus: BookingStatus
+  notes?: string | null
+}
+
+type TripApiDto = {
+  id: string
+  tripNumber: string
+  bookingId?: string | null
+  bookingReference?: string | null
+  vehicleId: string
+  driverId?: string | null
+  renterId: string
+  vehicleLabel?: string | null
+  driverName?: string | null
+  renterName?: string | null
+  tripType: ApiTripType
+  startDateTime: string
+  endDateTime?: string | null
+  startingOdometer?: number | null
+  endingOdometer?: number | null
+  totalKilometers: number
+  fuelExpense: number
+  tollExpense: number
+  parkingExpense: number
+  otherExpenses: number
+  grossRevenue: number
+  driverProceedCommission: number
+  totalExpenses: number
+  netProfit: number
+  paymentMethod?: string | null
+  paymentStatus: Trip['paymentStatus']
+  remarks?: string | null
+  status: TripStatus
+}
+
+type MaintenanceApiDto = {
+  id: string
+  vehicleId: string
+  vehicleLabel?: string | null
+  title: string
+  dueDate?: string | null
+  dueOdometer?: number | null
+  status: ApiMaintenanceStatus
+  vendorShop?: string | null
+  estimatedCost?: number | null
+  notes?: string | null
+}
+
+type NotificationApiDto = {
+  id: string
+  title: string
+  message: string
+  type: ApiNotificationType
+  isRead: boolean
+  createdAt: string
+  relatedEntityType?: string | null
+  relatedEntityId?: string | null
+}
+
+type GalleryPhoto = {
+  id: string
+  displayUrl?: string | null
+  caption?: string | null
+  originalFileName?: string | null
+}
+
 const authStorageKey = 'metrobeez.auth'
+const authExpiredEventName = 'beezfleet.auth-expired'
+let lastAuthExpiredSignalAt = 0
 const apiBaseUrl = ((import.meta.env.VITE_API_BASE_URL as string | undefined)
   ?? (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:5117' : '')).replace(/\/$/, '')
 
 function loadStoredSession() {
   try {
     const value = window.localStorage.getItem(authStorageKey)
-    return value ? (JSON.parse(value) as AuthSession) : null
+    if (!value) {
+      return null
+    }
+
+    const session = JSON.parse(value) as AuthSession
+    if (isJwtExpired(session.token)) {
+      window.localStorage.removeItem(authStorageKey)
+      return null
+    }
+
+    return session
   } catch {
     window.localStorage.removeItem(authStorageKey)
     return null
+  }
+}
+
+function isJwtExpired(token?: string) {
+  if (!token) {
+    return true
+  }
+
+  try {
+    const encodedPayload = token.split('.')[1]
+    if (!encodedPayload) {
+      return false
+    }
+
+    const base64Payload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const paddedPayload = base64Payload.padEnd(base64Payload.length + ((4 - (base64Payload.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(paddedPayload)) as { exp?: number }
+    return typeof payload.exp === 'number' && payload.exp <= Math.floor(Date.now() / 1000) + 30
+  } catch {
+    return false
   }
 }
 
@@ -293,6 +431,7 @@ async function postJson<TResponse>(path: string, body: unknown, token?: string) 
 
   const text = await response.text()
   if (!response.ok) {
+    notifyAuthFailure(response.status, text)
     throw new Error(readApiError(text, response.statusText, response.status))
   }
 
@@ -306,6 +445,7 @@ async function getJson<TResponse>(path: string, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
+    notifyAuthFailure(response.status, text)
     throw new Error(readApiError(text, response.statusText, response.status))
   }
 
@@ -324,6 +464,7 @@ async function putJson<TResponse>(path: string, body: unknown, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
+    notifyAuthFailure(response.status, text)
     throw new Error(readApiError(text, response.statusText, response.status))
   }
 
@@ -338,6 +479,7 @@ async function deleteJson(path: string, token?: string) {
 
   const text = await response.text()
   if (!response.ok) {
+    notifyAuthFailure(response.status, text)
     throw new Error(readApiError(text, response.statusText, response.status))
   }
 }
@@ -351,10 +493,27 @@ async function postForm<TResponse>(path: string, body: FormData, token?: string)
 
   const text = await response.text()
   if (!response.ok) {
+    notifyAuthFailure(response.status, text)
     throw new Error(readApiError(text, response.statusText, response.status))
   }
 
   return (text ? JSON.parse(text) : undefined) as TResponse
+}
+
+function notifyAuthFailure(status: number, text: string) {
+  if (status !== 401) {
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastAuthExpiredSignalAt < 1000) {
+    return
+  }
+
+  lastAuthExpiredSignalAt = now
+  window.dispatchEvent(new CustomEvent(authExpiredEventName, {
+    detail: { message: readApiError(text, 'Unauthorized', status) },
+  }))
 }
 
 function readApiError(text: string, fallback: string, status?: number) {
@@ -531,6 +690,20 @@ function App() {
     window.setTimeout(() => setToast(null), 3200)
   }
   useEffect(() => {
+    const handleAuthExpired = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: string }>).detail?.message
+      window.localStorage.removeItem(authStorageKey)
+      setSession(null)
+      showToast({
+        title: 'Session expired',
+        detail: message && message !== 'Unauthorized' ? message : 'Please log in again before continuing.',
+      })
+    }
+
+    window.addEventListener(authExpiredEventName, handleAuthExpired)
+    return () => window.removeEventListener(authExpiredEventName, handleAuthExpired)
+  }, [])
+  useEffect(() => {
     if (!session?.token) {
       return
     }
@@ -563,17 +736,26 @@ function App() {
     }
 
     let active = true
-    Promise.all([
+    Promise.allSettled([
       getJson<VehicleApiDto[]>('/api/vehicles', session.token),
       getJson<DriverApiDto[]>('/api/drivers', session.token),
+      getJson<RenterApiDto[]>('/api/renters', session.token),
+      getJson<BookingApiDto[]>('/api/bookings', session.token),
+      getJson<TripApiDto[]>('/api/trips', session.token),
+      getJson<MaintenanceApiDto[]>('/api/maintenance', session.token),
+      getJson<DocumentAttachment[]>('/api/documents', session.token),
+      getJson<NotificationApiDto[]>('/api/notifications', session.token),
     ])
-      .then(([apiVehicles, apiDrivers]) => {
+      .then(([apiVehicles, apiDrivers, apiRenters, apiBookings, apiTrips, apiMaintenance, apiDocuments, apiNotifications]) => {
         if (!active) return
-        setVehicles(apiVehicles.map(vehicleFromApi))
-        setDrivers(apiDrivers.map(driverFromApi))
-      })
-      .catch(() => {
-        // Keep the local demo records available if the API is offline during development.
+        if (apiVehicles.status === 'fulfilled') setVehicles(apiVehicles.value.map(vehicleFromApi))
+        if (apiDrivers.status === 'fulfilled') setDrivers(apiDrivers.value.map(driverFromApi))
+        if (apiRenters.status === 'fulfilled') setRenters(apiRenters.value.map(renterFromApi))
+        if (apiBookings.status === 'fulfilled') setBookings(apiBookings.value.map(bookingFromApi))
+        if (apiTrips.status === 'fulfilled') setTrips(apiTrips.value.map(tripFromApi))
+        if (apiMaintenance.status === 'fulfilled') setMaintenance(apiMaintenance.value.map(maintenanceFromApi))
+        if (apiDocuments.status === 'fulfilled') setDocuments(apiDocuments.value.filter((item) => !item.isPhoto))
+        if (apiNotifications.status === 'fulfilled') setNotifications(apiNotifications.value.map(notificationFromApi))
       })
 
     return () => {
@@ -665,9 +847,9 @@ function App() {
             element={<VehiclesPage vehicles={vehicles} setVehicles={setVehicles} session={session} showToast={showToast} />}
           />
           <Route path="/vehicles/:id" element={<VehicleDetailsPage data={data} setVehicles={setVehicles} setDocuments={setDocuments} session={session} showToast={showToast} />} />
-          <Route path="/drivers" element={<DriversPage drivers={drivers} setDrivers={setDrivers} trips={trips} />} />
+          <Route path="/drivers" element={<DriversPage drivers={drivers} setDrivers={setDrivers} trips={trips} session={session} showToast={showToast} />} />
           <Route path="/drivers/:id" element={<DriverDetailsPage data={data} setDrivers={setDrivers} setDocuments={setDocuments} session={session} showToast={showToast} />} />
-          <Route path="/renters" element={<RentersPage renters={renters} setRenters={setRenters} data={data} />} />
+          <Route path="/renters" element={<RentersPage renters={renters} setRenters={setRenters} data={data} session={session} showToast={showToast} />} />
           <Route path="/renters/:id" element={<RenterDetailsPage data={data} setRenters={setRenters} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route
             path="/bookings"
@@ -676,6 +858,8 @@ function App() {
                 data={data}
                 setBookings={setBookings}
                 setTrips={setTrips}
+                setVehicles={setVehicles}
+                session={session}
                 showToast={showToast}
               />
             }
@@ -683,7 +867,7 @@ function App() {
           <Route path="/bookings/:id" element={<BookingDetailsPage data={data} setBookings={setBookings} setDocuments={setDocuments} session={session} showToast={showToast} />} />
           <Route
             path="/trips"
-            element={<TripsPage data={data} setTrips={setTrips} setVehicles={setVehicles} showToast={showToast} appendTripAudit={appendTripAudit} />}
+            element={<TripsPage data={data} setTrips={setTrips} setVehicles={setVehicles} session={session} showToast={showToast} appendTripAudit={appendTripAudit} />}
           />
           <Route path="/trips/:id" element={<TripDetailsPage data={data} setTrips={setTrips} setDocuments={setDocuments} session={session} showToast={showToast} appendTripAudit={appendTripAudit} />} />
           <Route
@@ -700,7 +884,7 @@ function App() {
           />
           <Route
             path="/notifications"
-            element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} />}
+            element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} session={session} showToast={showToast} />}
           />
           <Route path="/reports" element={<ReportsPage data={data} />} />
           <Route
@@ -1243,29 +1427,53 @@ function DriversPage({
   drivers,
   setDrivers,
   trips,
+  session,
+  showToast,
 }: {
   drivers: Driver[]
   setDrivers: React.Dispatch<React.SetStateAction<Driver[]>>
   trips: Trip[]
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const filtered = drivers.filter((driver) => [driver.fullName, driver.email, driver.licenseNumber].join(' ').toLowerCase().includes(query.toLowerCase()))
 
-  const addDriver = (event: FormEvent<HTMLFormElement>) => {
+  const addDriver = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setDrivers((current) => [...current, driverFromForm(form)])
-    setModalOpen(false)
+    if (!session?.token) {
+      showToast({ title: 'Driver not saved', detail: 'Please sign in again before changing drivers.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<DriverApiDto>('/api/drivers', driverPayloadFromForm(new FormData(event.currentTarget)), session.token)
+      setDrivers((current) => [...current, driverFromApi(saved)])
+      setModalOpen(false)
+      showToast({ title: 'Driver saved', detail: `${saved.fullName} was added to the driver list.` })
+    } catch (error) {
+      showToast({ title: 'Driver not saved', detail: error instanceof Error ? error.message : 'Please review the driver details.' })
+    }
   }
   const editingDriver = drivers.find((driver) => driver.id === editId)
-  const editDriver = (event: FormEvent<HTMLFormElement>) => {
+  const editDriver = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingDriver) return
-    const form = new FormData(event.currentTarget)
-    setDrivers((current) => current.map((driver) => driver.id === editingDriver.id ? driverFromForm(form, editingDriver) : driver))
-    setEditId(null)
+    if (!session?.token) {
+      showToast({ title: 'Driver not saved', detail: 'Please sign in again before changing drivers.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<DriverApiDto>(`/api/drivers/${editingDriver.id}`, driverPayloadFromForm(new FormData(event.currentTarget), editingDriver), session.token)
+      setDrivers((current) => current.map((driver) => driver.id === editingDriver.id ? driverFromApi(saved) : driver))
+      setEditId(null)
+      showToast({ title: 'Driver updated', detail: `${saved.fullName} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'Driver not saved', detail: error instanceof Error ? error.message : 'Please review the driver details.' })
+    }
   }
 
   return (
@@ -1365,12 +1573,21 @@ function DriverDetailsPage({
       <Modal title="Edit driver" open={editOpen} onClose={() => setEditOpen(false)}>
         <DriverForm
           defaultValues={driver}
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
-            setDrivers((current) => current.map((item) => item.id === driver.id ? driverFromForm(form, driver) : item))
-            setEditOpen(false)
-            showToast({ title: 'Driver updated', detail: `${driver.fullName} changes were saved.` })
+            if (!session?.token) {
+              showToast({ title: 'Driver not saved', detail: 'Please sign in again before changing drivers.' })
+              return
+            }
+
+            try {
+              const saved = await putJson<DriverApiDto>(`/api/drivers/${driver.id}`, driverPayloadFromForm(new FormData(event.currentTarget), driver), session.token)
+              setDrivers((current) => current.map((item) => item.id === driver.id ? driverFromApi(saved) : item))
+              setEditOpen(false)
+              showToast({ title: 'Driver updated', detail: `${saved.fullName} changes were saved.` })
+            } catch (error) {
+              showToast({ title: 'Driver not saved', detail: error instanceof Error ? error.message : 'Please review the driver details.' })
+            }
           }}
           submitLabel="Save driver changes"
         />
@@ -1383,29 +1600,53 @@ function RentersPage({
   renters,
   setRenters,
   data,
+  session,
+  showToast,
 }: {
   renters: Renter[]
   setRenters: React.Dispatch<React.SetStateAction<Renter[]>>
   data: AppData
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const filtered = renters.filter((renter) => [renter.fullName, renter.email, renter.validIdNumber].join(' ').toLowerCase().includes(query.toLowerCase()))
 
-  const addRenter = (event: FormEvent<HTMLFormElement>) => {
+  const addRenter = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setRenters((current) => [...current, renterFromForm(form)])
-    setModalOpen(false)
+    if (!session?.token) {
+      showToast({ title: 'Renter not saved', detail: 'Please sign in again before changing renters.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<RenterApiDto>('/api/renters', renterPayloadFromForm(new FormData(event.currentTarget)), session.token)
+      setRenters((current) => [...current, renterFromApi(saved)])
+      setModalOpen(false)
+      showToast({ title: 'Renter saved', detail: `${saved.fullName} was added to the customer list.` })
+    } catch (error) {
+      showToast({ title: 'Renter not saved', detail: error instanceof Error ? error.message : 'Please review the renter details.' })
+    }
   }
   const editingRenter = renters.find((renter) => renter.id === editId)
-  const editRenter = (event: FormEvent<HTMLFormElement>) => {
+  const editRenter = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingRenter) return
-    const form = new FormData(event.currentTarget)
-    setRenters((current) => current.map((renter) => renter.id === editingRenter.id ? renterFromForm(form, editingRenter) : renter))
-    setEditId(null)
+    if (!session?.token) {
+      showToast({ title: 'Renter not saved', detail: 'Please sign in again before changing renters.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<RenterApiDto>(`/api/renters/${editingRenter.id}`, renterPayloadFromForm(new FormData(event.currentTarget), editingRenter), session.token)
+      setRenters((current) => current.map((renter) => renter.id === editingRenter.id ? renterFromApi(saved) : renter))
+      setEditId(null)
+      showToast({ title: 'Renter updated', detail: `${saved.fullName} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'Renter not saved', detail: error instanceof Error ? error.message : 'Please review the renter details.' })
+    }
   }
 
   return (
@@ -1499,12 +1740,21 @@ function RenterDetailsPage({
       <Modal title="Edit renter" open={editOpen} onClose={() => setEditOpen(false)}>
         <RenterForm
           defaultValues={renter}
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
-            setRenters((current) => current.map((item) => item.id === renter.id ? renterFromForm(form, renter) : item))
-            setEditOpen(false)
-            showToast({ title: 'Renter updated', detail: `${renter.fullName} changes were saved.` })
+            if (!session?.token) {
+              showToast({ title: 'Renter not saved', detail: 'Please sign in again before changing renters.' })
+              return
+            }
+
+            try {
+              const saved = await putJson<RenterApiDto>(`/api/renters/${renter.id}`, renterPayloadFromForm(new FormData(event.currentTarget), renter), session.token)
+              setRenters((current) => current.map((item) => item.id === renter.id ? renterFromApi(saved) : item))
+              setEditOpen(false)
+              showToast({ title: 'Renter updated', detail: `${saved.fullName} changes were saved.` })
+            } catch (error) {
+              showToast({ title: 'Renter not saved', detail: error instanceof Error ? error.message : 'Please review the renter details.' })
+            }
           }}
           submitLabel="Save renter changes"
         />
@@ -1517,11 +1767,15 @@ function BookingsPage({
   data,
   setBookings,
   setTrips,
+  setVehicles,
+  session,
   showToast,
 }: {
   data: AppData
   setBookings: React.Dispatch<React.SetStateAction<Booking[]>>
   setTrips: React.Dispatch<React.SetStateAction<Trip[]>>
+  setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
@@ -1532,7 +1786,7 @@ function BookingsPage({
     .filter((booking) => status === 'All' || booking.bookingStatus === status)
     .filter((booking) => [booking.referenceNumber, renterName(data, booking.renterId), vehicleLabel(data, booking.vehicleId)].join(' ').toLowerCase().includes(query.toLowerCase()))
 
-  const addBooking = (event: FormEvent<HTMLFormElement>) => {
+  const addBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const vehicleId = String(form.get('vehicleId'))
@@ -1544,11 +1798,22 @@ function BookingsPage({
       return
     }
 
-    setBookings((current) => [...current, bookingFromForm(form, undefined, `BK-2026-${String(current.length + 1).padStart(4, '0')}`)])
-    setModalOpen(false)
+    if (!session?.token) {
+      showToast({ title: 'Booking not saved', detail: 'Please sign in again before changing bookings.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<BookingApiDto>('/api/bookings', bookingPayloadFromForm(form), session.token)
+      setBookings((current) => [...current, bookingFromApi(saved)])
+      setModalOpen(false)
+      showToast({ title: 'Booking saved', detail: `${saved.referenceNumber} was added to the calendar.` })
+    } catch (error) {
+      showToast({ title: 'Booking not saved', detail: error instanceof Error ? error.message : 'Please review the booking details.' })
+    }
   }
   const editingBooking = data.bookings.find((booking) => booking.id === editId)
-  const editBooking = (event: FormEvent<HTMLFormElement>) => {
+  const editBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingBooking) return
     const form = new FormData(event.currentTarget)
@@ -1561,39 +1826,38 @@ function BookingsPage({
       return
     }
 
-    setBookings((current) => current.map((booking) => booking.id === editingBooking.id ? bookingFromForm(form, editingBooking) : booking))
-    setEditId(null)
-    showToast({ title: 'Booking updated', detail: `${editingBooking.referenceNumber} changes were saved.` })
+    if (!session?.token) {
+      showToast({ title: 'Booking not saved', detail: 'Please sign in again before changing bookings.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<BookingApiDto>(`/api/bookings/${editingBooking.id}`, bookingPayloadFromForm(form, editingBooking), session.token)
+      setBookings((current) => current.map((booking) => booking.id === editingBooking.id ? bookingFromApi(saved) : booking))
+      setEditId(null)
+      showToast({ title: 'Booking updated', detail: `${saved.referenceNumber} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'Booking not saved', detail: error instanceof Error ? error.message : 'Please review the booking details.' })
+    }
   }
 
-  const convertToTrip = (booking: Booking) => {
+  const convertToTrip = async (booking: Booking) => {
     const tripExists = data.trips.some((trip) => trip.bookingReference === booking.referenceNumber)
     if (tripExists) return
-    setTrips((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        tripNumber: `TR-2026-${String(current.length + 1).padStart(4, '0')}`,
-        bookingReference: booking.referenceNumber,
-        vehicleId: booking.vehicleId,
-        driverId: booking.driverId,
-        renterId: booking.renterId,
-        tripType: booking.bookingType === 'Delivery/logistics' ? 'Delivery' : 'Rental',
-        startDateTime: booking.startDateTime,
-        endDateTime: booking.endDateTime,
-        fuelExpense: 0,
-        tollExpense: 0,
-        parkingExpense: 0,
-        otherExpenses: 0,
-        grossRevenue: booking.rateAmount,
-        driverProceedCommission: 0,
-        paymentMethod: '',
-        paymentStatus: booking.paymentStatus,
-        remarks: 'Converted from booking',
-        status: 'Scheduled',
-      },
-    ])
-    showToast({ title: 'Trip created', detail: `${booking.referenceNumber} was converted to a scheduled trip.` })
+    if (!session?.token) {
+      showToast({ title: 'Trip not created', detail: 'Please sign in again before converting bookings.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<TripApiDto>(`/api/bookings/${booking.id}/convert-to-trip`, {}, session.token)
+      setTrips((current) => [...current, tripFromApi(saved)])
+      setBookings((current) => current.map((item) => item.id === booking.id ? { ...item, bookingStatus: 'Active' } : item))
+      setVehicles((current) => current.map((vehicle) => vehicle.id === booking.vehicleId ? { ...vehicle, status: 'Booked' } : vehicle))
+      showToast({ title: 'Trip created', detail: `${booking.referenceNumber} was converted to a scheduled trip.` })
+    } catch (error) {
+      showToast({ title: 'Trip not created', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
   }
 
   return (
@@ -1687,12 +1951,21 @@ function BookingDetailsPage({
         <BookingForm
           data={data}
           defaultValues={booking}
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
-            setBookings((current) => current.map((item) => item.id === booking.id ? bookingFromForm(form, booking) : item))
-            setEditOpen(false)
-            showToast({ title: 'Booking updated', detail: `${booking.referenceNumber} changes were saved.` })
+            if (!session?.token) {
+              showToast({ title: 'Booking not saved', detail: 'Please sign in again before changing bookings.' })
+              return
+            }
+
+            try {
+              const saved = await putJson<BookingApiDto>(`/api/bookings/${booking.id}`, bookingPayloadFromForm(new FormData(event.currentTarget), booking), session.token)
+              setBookings((current) => current.map((item) => item.id === booking.id ? bookingFromApi(saved) : item))
+              setEditOpen(false)
+              showToast({ title: 'Booking updated', detail: `${saved.referenceNumber} changes were saved.` })
+            } catch (error) {
+              showToast({ title: 'Booking not saved', detail: error instanceof Error ? error.message : 'Please review the booking details.' })
+            }
           }}
           submitLabel="Save booking changes"
         />
@@ -1705,12 +1978,14 @@ function TripsPage({
   data,
   setTrips,
   setVehicles,
+  session,
   showToast,
   appendTripAudit,
 }: {
   data: AppData
   setTrips: React.Dispatch<React.SetStateAction<Trip[]>>
   setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>
+  session: AuthSession | null
   showToast: (toast: Toast) => void
   appendTripAudit: (entityId: string, action: string, summary: string) => void
 }) {
@@ -1721,29 +1996,72 @@ function TripsPage({
     .filter((trip) => status === 'All' || trip.status === status)
     .filter((trip) => [trip.tripNumber, trip.bookingReference, renterName(data, trip.renterId), vehicleLabel(data, trip.vehicleId)].join(' ').toLowerCase().includes(query.toLowerCase()))
 
-  const startTrip = (trip: Trip) => {
-    setTrips((current) => current.map((item) => item.id === trip.id ? { ...item, status: 'Active', startingOdometer: item.startingOdometer || data.vehicles.find((vehicle) => vehicle.id === item.vehicleId)?.currentOdometer || 0 } : item))
-    setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Booked' } : vehicle))
-    appendTripAudit(trip.id, 'Trip started', 'Trip status moved to Active and starting odometer was captured.')
-    showToast({ title: 'Trip started', detail: `${trip.tripNumber} is now active.` })
+  const startTrip = async (trip: Trip) => {
+    if (!session?.token) {
+      showToast({ title: 'Trip not started', detail: 'Please sign in again before changing trips.' })
+      return
+    }
+
+    const startingOdometer = trip.startingOdometer || data.vehicles.find((vehicle) => vehicle.id === trip.vehicleId)?.currentOdometer || 0
+    try {
+      const saved = await putJson<TripApiDto>(`/api/trips/${trip.id}/start`, {
+        startingOdometer,
+        remarks: trip.remarks || null,
+      }, session.token)
+      setTrips((current) => current.map((item) => item.id === trip.id ? tripFromApi(saved) : item))
+      setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Booked' } : vehicle))
+      appendTripAudit(trip.id, 'Trip started', 'Trip status moved to Active and starting odometer was captured.')
+      showToast({ title: 'Trip started', detail: `${trip.tripNumber} is now active.` })
+    } catch (error) {
+      showToast({ title: 'Trip not started', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
   }
 
-  const completeTrip = (trip: Trip) => {
+  const completeTrip = async (trip: Trip) => {
+    if (!session?.token) {
+      showToast({ title: 'Trip not completed', detail: 'Please sign in again before changing trips.' })
+      return
+    }
+
     const endingOdometer = (trip.startingOdometer || 0) + 180
-    setTrips((current) => current.map((item) => item.id === trip.id ? { ...item, status: 'Completed', endingOdometer, endDateTime: new Date().toISOString(), fuelExpense: item.fuelExpense || 1800, tollExpense: item.tollExpense || 450, driverProceedCommission: item.driverProceedCommission || 1200, paymentStatus: 'Paid' } : item))
-    setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Available', currentOdometer: Math.max(vehicle.currentOdometer, endingOdometer) } : vehicle))
-    appendTripAudit(trip.id, 'Trip completed', 'Ending odometer, expenses, payment status, and vehicle availability were updated.')
-    showToast({ title: 'Trip completed', detail: `${trip.tripNumber} expenses and odometer were updated.` })
+    try {
+      const saved = await putJson<TripApiDto>(`/api/trips/${trip.id}/complete`, {
+        endDateTime: new Date().toISOString(),
+        endingOdometer,
+        fuelExpense: trip.fuelExpense || 1800,
+        tollExpense: trip.tollExpense || 450,
+        parkingExpense: trip.parkingExpense || 0,
+        otherExpenses: trip.otherExpenses || 0,
+        driverProceedCommission: trip.driverProceedCommission || 1200,
+        remarks: trip.remarks || null,
+      }, session.token)
+      setTrips((current) => current.map((item) => item.id === trip.id ? tripFromApi(saved) : item))
+      setVehicles((current) => current.map((vehicle) => vehicle.id === trip.vehicleId ? { ...vehicle, status: 'Available', currentOdometer: Math.max(vehicle.currentOdometer, endingOdometer) } : vehicle))
+      appendTripAudit(trip.id, 'Trip completed', 'Ending odometer, expenses, payment status, and vehicle availability were updated.')
+      showToast({ title: 'Trip completed', detail: `${trip.tripNumber} expenses and odometer were updated.` })
+    } catch (error) {
+      showToast({ title: 'Trip not completed', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
   }
   const editingTrip = data.trips.find((trip) => trip.id === editId)
-  const editTrip = (event: FormEvent<HTMLFormElement>) => {
+  const editTrip = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingTrip) return
     const form = new FormData(event.currentTarget)
-    setTrips((current) => current.map((trip) => trip.id === editingTrip.id ? tripFromForm(form, editingTrip) : trip))
-    appendTripAudit(editingTrip.id, 'Trip edited', 'Trip schedule, assignments, odometer, expenses, or payment fields were changed.')
-    setEditId(null)
-    showToast({ title: 'Trip updated', detail: `${editingTrip.tripNumber} changes were saved.` })
+    if (!session?.token) {
+      showToast({ title: 'Trip not saved', detail: 'Please sign in again before changing trips.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<TripApiDto>(`/api/trips/${editingTrip.id}`, tripPayloadFromForm(form, editingTrip), session.token)
+      setTrips((current) => current.map((trip) => trip.id === editingTrip.id ? tripFromApi(saved) : trip))
+      appendTripAudit(editingTrip.id, 'Trip edited', 'Trip schedule, assignments, odometer, expenses, or payment fields were changed.')
+      setEditId(null)
+      showToast({ title: 'Trip updated', detail: `${saved.tripNumber} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'Trip not saved', detail: error instanceof Error ? error.message : 'Please review the trip details.' })
+    }
   }
 
   return (
@@ -1853,13 +2171,22 @@ function TripDetailsPage({
         <TripForm
           data={data}
           defaultValues={trip}
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            const form = new FormData(event.currentTarget)
-            setTrips((current) => current.map((item) => item.id === trip.id ? tripFromForm(form, trip) : item))
-            appendTripAudit(trip.id, 'Trip edited', 'Trip details were updated from the detail page.')
-            setEditOpen(false)
-            showToast({ title: 'Trip updated', detail: `${trip.tripNumber} changes were saved.` })
+            if (!session?.token) {
+              showToast({ title: 'Trip not saved', detail: 'Please sign in again before changing trips.' })
+              return
+            }
+
+            try {
+              const saved = await putJson<TripApiDto>(`/api/trips/${trip.id}`, tripPayloadFromForm(new FormData(event.currentTarget), trip), session.token)
+              setTrips((current) => current.map((item) => item.id === trip.id ? tripFromApi(saved) : item))
+              appendTripAudit(trip.id, 'Trip edited', 'Trip details were updated from the detail page.')
+              setEditOpen(false)
+              showToast({ title: 'Trip updated', detail: `${saved.tripNumber} changes were saved.` })
+            } catch (error) {
+              showToast({ title: 'Trip not saved', detail: error instanceof Error ? error.message : 'Please review the trip details.' })
+            }
           }}
           submitLabel="Save trip changes"
         />
@@ -1887,20 +2214,39 @@ function MaintenancePage({
   const [editId, setEditId] = useState<string | null>(null)
   const [uploadTarget, setUploadTarget] = useState<MaintenanceSchedule | null>(null)
   const [uploading, setUploading] = useState(false)
-  const addSchedule = (event: FormEvent<HTMLFormElement>) => {
+  const addSchedule = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setMaintenance((current) => [...current, maintenanceFromForm(form)])
-    setModalOpen(false)
+    if (!session?.token) {
+      showToast({ title: 'PMS not saved', detail: 'Please sign in again before changing maintenance schedules.' })
+      return
+    }
+
+    try {
+      const saved = await postJson<MaintenanceApiDto>('/api/maintenance', maintenancePayloadFromForm(new FormData(event.currentTarget)), session.token)
+      setMaintenance((current) => [...current, maintenanceFromApi(saved)])
+      setModalOpen(false)
+      showToast({ title: 'PMS scheduled', detail: `${saved.title} was added to maintenance.` })
+    } catch (error) {
+      showToast({ title: 'PMS not saved', detail: error instanceof Error ? error.message : 'Please review the schedule details.' })
+    }
   }
   const editingSchedule = maintenance.find((item) => item.id === editId)
-  const editSchedule = (event: FormEvent<HTMLFormElement>) => {
+  const editSchedule = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingSchedule) return
-    const form = new FormData(event.currentTarget)
-    setMaintenance((current) => current.map((item) => item.id === editingSchedule.id ? maintenanceFromForm(form, editingSchedule) : item))
-    setEditId(null)
-    showToast({ title: 'PMS updated', detail: `${editingSchedule.title} changes were saved.` })
+    if (!session?.token) {
+      showToast({ title: 'PMS not saved', detail: 'Please sign in again before changing maintenance schedules.' })
+      return
+    }
+
+    try {
+      const saved = await putJson<MaintenanceApiDto>(`/api/maintenance/${editingSchedule.id}`, maintenancePayloadFromForm(new FormData(event.currentTarget), editingSchedule), session.token)
+      setMaintenance((current) => current.map((item) => item.id === editingSchedule.id ? maintenanceFromApi(saved) : item))
+      setEditId(null)
+      showToast({ title: 'PMS updated', detail: `${saved.title} changes were saved.` })
+    } catch (error) {
+      showToast({ title: 'PMS not saved', detail: error instanceof Error ? error.message : 'Please review the schedule details.' })
+    }
   }
   const uploadMaintenanceDocument = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -2186,7 +2532,7 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
                       <h2>{listing.vehicleLabel}</h2>
                       <p>{listing.status} - {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
                     </div>
-                    <label className="toggle-row">
+                    <label className="toggle-row publish-toggle">
                       <input name="isPublished" type="checkbox" defaultChecked={listing.isPublished} disabled={listing.publicPhotoCount === 0} />
                       <span>Published</span>
                     </label>
@@ -2262,6 +2608,7 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
   const [dark, setDark] = useState(true)
   const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [preview, setPreview] = useState<{ title: string; photos: GalleryPhoto[]; activeId: string } | null>(null)
 
   useEffect(() => {
     if (!tenantSlug) return
@@ -2349,10 +2696,33 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
 
       <section className="public-vehicle-grid">
         {page.vehicles.map((vehicle) => {
+          const galleryPhotos = vehicle.photos.map((photo) => ({
+            id: photo.id,
+            displayUrl: photo.displayUrl,
+            caption: photo.caption,
+          }))
+          const openGallery = (photoId = galleryPhotos[0]?.id) => {
+            if (photoId) {
+              setPreview({ title: vehicle.vehicleLabel, photos: galleryPhotos, activeId: photoId })
+            }
+          }
+
           return (
             <article className="public-vehicle-card" key={vehicle.vehicleId}>
-              <div className="public-vehicle-photo">
-                <SafeImage src={vehicle.photos[0]?.displayUrl} alt={vehicle.vehicleLabel} fallback={<Camera size={24} />} />
+              <div className="public-vehicle-gallery">
+                <button className="public-vehicle-photo" type="button" onClick={() => openGallery()} aria-label={`Open ${vehicle.vehicleLabel} photos`}>
+                  <SafeImage src={vehicle.photos[0]?.displayUrl} alt={vehicle.vehicleLabel} fallback={<Camera size={24} />} loading="eager" />
+                  {vehicle.photos.length > 0 && <span><Images size={14} /> {vehicle.photos.length}</span>}
+                </button>
+                {vehicle.photos.length > 1 && (
+                  <div className="public-photo-thumbs" aria-label={`${vehicle.vehicleLabel} photo thumbnails`}>
+                    {vehicle.photos.slice(0, 5).map((photo, index) => (
+                      <button key={photo.id} type="button" onClick={() => openGallery(photo.id)} aria-label={`Open photo ${index + 1} of ${vehicle.vehicleLabel}`}>
+                        <SafeImage src={photo.displayUrl} alt={photo.caption || `${vehicle.vehicleLabel} photo ${index + 1}`} fallback={<Camera size={14} />} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="public-vehicle-body">
                 <div className="public-vehicle-title">
@@ -2396,6 +2766,15 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
           </form>
         </section>
       )}
+      {preview && (
+        <GalleryLightbox
+          title={preview.title}
+          photos={preview.photos}
+          activeId={preview.activeId}
+          onActiveIdChange={(activeId) => setPreview((current) => current ? { ...current, activeId } : current)}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </main>
   )
 }
@@ -2403,15 +2782,49 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
 function NotificationsPage({
   notifications,
   setNotifications,
+  session,
+  showToast,
 }: {
   notifications: NotificationItem[]
   setNotifications: React.Dispatch<React.SetStateAction<NotificationItem[]>>
+  session: AuthSession | null
+  showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
   const filtered = notifications.filter((item) => [item.title, item.message, item.type].join(' ').toLowerCase().includes(query.toLowerCase()))
+  const markRead = async (item: NotificationItem) => {
+    if (!session?.token) {
+      showToast({ title: 'Notification not saved', detail: 'Please sign in again before changing notifications.' })
+      return
+    }
+
+    try {
+      await putJson(`/api/notifications/${item.id}/read`, {}, session.token)
+      setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true } : notification))
+    } catch (error) {
+      showToast({ title: 'Notification not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const markAllRead = async () => {
+    if (!session?.token) {
+      showToast({ title: 'Notifications not saved', detail: 'Please sign in again before changing notifications.' })
+      return
+    }
+
+    const unread = notifications.filter((item) => !item.isRead)
+    try {
+      await Promise.all(unread.map((item) => putJson(`/api/notifications/${item.id}/read`, {}, session.token)))
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })))
+      showToast({ title: 'Notifications cleared', detail: 'All notifications were marked read.' })
+    } catch (error) {
+      showToast({ title: 'Notifications not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
   return (
     <Page>
-      <PageHeader eyebrow="Alerts" title="Notifications" action={<button className="primary-button" type="button" onClick={() => setNotifications((current) => current.map((item) => ({ ...item, isRead: true })))}><CheckCircle2 size={18} /> Mark all read</button>} />
+      <PageHeader eyebrow="Alerts" title="Notifications" action={<button className="primary-button" type="button" onClick={markAllRead}><CheckCircle2 size={18} /> Mark all read</button>} />
       <Toolbar query={query} setQuery={setQuery} placeholder="Search notifications" />
       <Table>
         <thead>
@@ -2426,7 +2839,7 @@ function NotificationsPage({
               <td>{item.isRead ? <Badge status="Clear" /> : <span className="unread-pill">New</span>}</td>
               <td className="table-actions">
                 {!item.isRead && (
-                  <button className="icon-button" type="button" title="Mark read" onClick={() => setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true } : notification))}>
+                  <button className="icon-button" type="button" title="Mark read" onClick={() => markRead(item)}>
                     <CheckCircle2 size={16} />
                   </button>
                 )}
@@ -3330,6 +3743,7 @@ function EntityPhotosPanel({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [previewPhotoId, setPreviewPhotoId] = useState('')
 
   useEffect(() => {
     if (!session?.token || !entityId) {
@@ -3403,9 +3817,10 @@ function EntityPhotosPanel({
         {photos.map((photo) => {
           return (
             <article className="photo-card" key={photo.id}>
-              <div className="photo-thumb">
+              <button className="photo-thumb photo-thumb-button" type="button" onClick={() => setPreviewPhotoId(photo.id)} aria-label={`Enlarge ${photo.caption || photo.originalFileName}`}>
                 <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={24} />} />
-              </div>
+                <span><Maximize2 size={14} /> Open</span>
+              </button>
               <div className="photo-card-body">
                 <span className="photo-name">{photo.caption || photo.originalFileName}</span>
                 {photo.isPublic && <Badge status="Public" />}
@@ -3417,6 +3832,15 @@ function EntityPhotosPanel({
           )
         })}
       </div>
+      {previewPhotoId && (
+        <GalleryLightbox
+          title={`${entityLabel} photos`}
+          photos={photos}
+          activeId={previewPhotoId}
+          onActiveIdChange={setPreviewPhotoId}
+          onClose={() => setPreviewPhotoId('')}
+        />
+      )}
       <Modal title="Add photo" open={uploadOpen} onClose={() => setUploadOpen(false)}>
         <form className="modal-form photo-upload-form" onSubmit={upload}>
           <input type="hidden" name="entityType" value={entityType} />
@@ -3477,6 +3901,83 @@ function Modal({ title, open, onClose, children }: { title: string; open: boolea
       <div className="modal">
         <header><h2>{title}</h2><button className="icon-button" type="button" title="Close modal" onClick={onClose}><X size={18} /></button></header>
         {children}
+      </div>
+    </div>
+  )
+}
+
+function GalleryLightbox({
+  title,
+  photos,
+  activeId,
+  onActiveIdChange,
+  onClose,
+}: {
+  title: string
+  photos: GalleryPhoto[]
+  activeId: string
+  onActiveIdChange: (id: string) => void
+  onClose: () => void
+}) {
+  const activeIndex = Math.max(0, photos.findIndex((photo) => photo.id === activeId))
+  const activePhoto = photos[activeIndex]
+  const canNavigate = photos.length > 1
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+
+      if (event.key === 'ArrowLeft' && canNavigate) {
+        onActiveIdChange(photos[(activeIndex - 1 + photos.length) % photos.length].id)
+      }
+
+      if (event.key === 'ArrowRight' && canNavigate) {
+        onActiveIdChange(photos[(activeIndex + 1) % photos.length].id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeIndex, canNavigate, onActiveIdChange, onClose, photos])
+
+  if (!activePhoto) return null
+
+  const previous = () => onActiveIdChange(photos[(activeIndex - 1 + photos.length) % photos.length].id)
+  const next = () => onActiveIdChange(photos[(activeIndex + 1) % photos.length].id)
+
+  return (
+    <div className="gallery-lightbox-layer" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="gallery-lightbox">
+        <header>
+          <div>
+            <h2>{title}</h2>
+            <span>{activeIndex + 1} of {photos.length}</span>
+          </div>
+          <button className="icon-button" type="button" title="Close gallery" onClick={onClose}><X size={18} /></button>
+        </header>
+        <div className="gallery-lightbox-stage">
+          {canNavigate && <button className="gallery-nav previous" type="button" title="Previous photo" onClick={previous}><ChevronLeft size={22} /></button>}
+          <SafeImage src={activePhoto.displayUrl} alt={activePhoto.caption || activePhoto.originalFileName || title} fallback={<Camera size={32} />} loading="eager" />
+          {canNavigate && <button className="gallery-nav next" type="button" title="Next photo" onClick={next}><ChevronRight size={22} /></button>}
+        </div>
+        {(activePhoto.caption || activePhoto.originalFileName) && <p>{activePhoto.caption || activePhoto.originalFileName}</p>}
+        {photos.length > 1 && (
+          <div className="gallery-lightbox-thumbs">
+            {photos.map((photo, index) => (
+              <button
+                className={photo.id === activePhoto.id ? 'active' : ''}
+                key={photo.id}
+                type="button"
+                onClick={() => onActiveIdChange(photo.id)}
+                aria-label={`Show photo ${index + 1}`}
+              >
+                <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName || `${title} photo ${index + 1}`} fallback={<Camera size={14} />} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -3669,13 +4170,6 @@ function parseCustomFeatures(value: string) {
     .filter((feature): feature is { icon: string; label: string; displayOrder: number } => Boolean(feature?.label))
 }
 
-function formOptionalNumber(form: FormData, name: string) {
-  const raw = form.get(name)
-  if (raw === null || raw === '') return undefined
-  const value = Number(raw)
-  return Number.isFinite(value) ? value : undefined
-}
-
 function vehicleFromApi(vehicle: VehicleApiDto): Vehicle {
   return {
     id: vehicle.id,
@@ -3717,6 +4211,95 @@ function driverFromApi(driver: DriverApiDto): Driver {
   }
 }
 
+function renterFromApi(renter: RenterApiDto): Renter {
+  return {
+    id: renter.id,
+    fullName: renter.fullName,
+    address: renter.address || '',
+    contactNumber: renter.contactNumber || '',
+    email: renter.email || '',
+    validIdType: renter.validIdType || '',
+    validIdNumber: renter.validIdNumber || '',
+    driverLicenseNumber: renter.driverLicenseNumber || '',
+    emergencyContact: renter.emergencyContact || '',
+    isWatchlisted: renter.isWatchlisted,
+    notes: renter.notes || '',
+  }
+}
+
+function bookingFromApi(booking: BookingApiDto): Booking {
+  return {
+    id: booking.id,
+    referenceNumber: booking.referenceNumber,
+    renterId: booking.renterId,
+    vehicleId: booking.vehicleId,
+    driverId: booking.driverId || undefined,
+    bookingType: fromApiBookingType(booking.bookingType),
+    startDateTime: booking.startDateTime,
+    endDateTime: booking.endDateTime,
+    pickupLocation: booking.pickupLocation || '',
+    returnLocation: booking.returnLocation || '',
+    rateType: booking.rateType,
+    rateAmount: booking.rateAmount,
+    securityDeposit: booking.securityDeposit,
+    paymentStatus: booking.paymentStatus,
+    bookingStatus: booking.bookingStatus,
+    notes: booking.notes || '',
+  }
+}
+
+function tripFromApi(trip: TripApiDto): Trip {
+  return {
+    id: trip.id,
+    tripNumber: trip.tripNumber,
+    bookingId: trip.bookingId || undefined,
+    bookingReference: trip.bookingReference || undefined,
+    vehicleId: trip.vehicleId,
+    driverId: trip.driverId || undefined,
+    renterId: trip.renterId,
+    tripType: fromApiTripType(trip.tripType),
+    startDateTime: trip.startDateTime,
+    endDateTime: trip.endDateTime || undefined,
+    startingOdometer: trip.startingOdometer ?? undefined,
+    endingOdometer: trip.endingOdometer ?? undefined,
+    fuelExpense: trip.fuelExpense,
+    tollExpense: trip.tollExpense,
+    parkingExpense: trip.parkingExpense,
+    otherExpenses: trip.otherExpenses,
+    grossRevenue: trip.grossRevenue,
+    driverProceedCommission: trip.driverProceedCommission,
+    paymentMethod: trip.paymentMethod || '',
+    paymentStatus: trip.paymentStatus,
+    remarks: trip.remarks || '',
+    status: trip.status,
+  }
+}
+
+function maintenanceFromApi(schedule: MaintenanceApiDto): MaintenanceSchedule {
+  return {
+    id: schedule.id,
+    vehicleId: schedule.vehicleId,
+    title: schedule.title,
+    dueDate: schedule.dueDate || '',
+    dueOdometer: schedule.dueOdometer ?? 0,
+    status: fromApiMaintenanceStatus(schedule.status),
+    vendorShop: schedule.vendorShop || '',
+    estimatedCost: schedule.estimatedCost ?? 0,
+    notes: schedule.notes || '',
+  }
+}
+
+function notificationFromApi(notification: NotificationApiDto): NotificationItem {
+  return {
+    id: notification.id,
+    title: notification.title,
+    message: notification.message,
+    type: fromApiNotificationType(notification.type),
+    isRead: notification.isRead,
+    createdAt: notification.createdAt,
+  }
+}
+
 function vehiclePayloadFromForm(form: FormData, existing?: Vehicle): Omit<VehicleApiDto, 'id'> {
   return {
     plateNumber: formString(form, 'plateNumber', existing?.plateNumber).trim(),
@@ -3745,95 +4328,168 @@ function toApiVehicleStatus(status: VehicleStatus): VehicleApiDto['status'] {
   return status === 'Under Maintenance' ? 'UnderMaintenance' : status
 }
 
-function driverFromForm(form: FormData, existing?: Driver): Driver {
+function driverPayloadFromForm(form: FormData, existing?: Driver): Omit<DriverApiDto, 'id'> {
   return {
-    id: existing?.id ?? crypto.randomUUID(),
-    fullName: formString(form, 'fullName', existing?.fullName),
-    address: formString(form, 'address', existing?.address),
-    contactNumber: formString(form, 'contactNumber', existing?.contactNumber),
-    email: formString(form, 'email', existing?.email),
-    emergencyContact: formString(form, 'emergencyContact', existing?.emergencyContact),
-    licenseNumber: formString(form, 'licenseNumber', existing?.licenseNumber),
-    licenseTypeRestrictions: formString(form, 'licenseTypeRestrictions', existing?.licenseTypeRestrictions),
-    licenseExpirationDate: formString(form, 'licenseExpirationDate', existing?.licenseExpirationDate),
+    fullName: formString(form, 'fullName', existing?.fullName).trim(),
+    address: nullableFormString(form, 'address', existing?.address),
+    contactNumber: nullableFormString(form, 'contactNumber', existing?.contactNumber),
+    email: nullableFormString(form, 'email', existing?.email),
+    emergencyContact: nullableFormString(form, 'emergencyContact', existing?.emergencyContact),
+    licenseNumber: nullableFormString(form, 'licenseNumber', existing?.licenseNumber),
+    licenseTypeRestrictions: nullableFormString(form, 'licenseTypeRestrictions', existing?.licenseTypeRestrictions),
+    licenseExpirationDate: nullableFormString(form, 'licenseExpirationDate', existing?.licenseExpirationDate),
     status: formString(form, 'status', existing?.status ?? 'Active') as Driver['status'],
-    notes: formString(form, 'notes', existing?.notes),
+    notes: nullableFormString(form, 'notes', existing?.notes),
   }
 }
 
-function renterFromForm(form: FormData, existing?: Renter): Renter {
+function renterPayloadFromForm(form: FormData, existing?: Renter) {
   return {
-    id: existing?.id ?? crypto.randomUUID(),
-    fullName: formString(form, 'fullName', existing?.fullName),
-    address: formString(form, 'address', existing?.address),
-    contactNumber: formString(form, 'contactNumber', existing?.contactNumber),
-    email: formString(form, 'email', existing?.email),
-    validIdType: formString(form, 'validIdType', existing?.validIdType),
-    validIdNumber: formString(form, 'validIdNumber', existing?.validIdNumber),
-    driverLicenseNumber: formString(form, 'driverLicenseNumber', existing?.driverLicenseNumber),
-    emergencyContact: formString(form, 'emergencyContact', existing?.emergencyContact),
+    fullName: formString(form, 'fullName', existing?.fullName).trim(),
+    address: nullableFormString(form, 'address', existing?.address),
+    contactNumber: nullableFormString(form, 'contactNumber', existing?.contactNumber),
+    email: nullableFormString(form, 'email', existing?.email),
+    birthdate: null,
+    validIdType: nullableFormString(form, 'validIdType', existing?.validIdType),
+    validIdNumber: nullableFormString(form, 'validIdNumber', existing?.validIdNumber),
+    idExpirationDate: null,
+    driverLicenseNumber: nullableFormString(form, 'driverLicenseNumber', existing?.driverLicenseNumber),
+    emergencyContact: nullableFormString(form, 'emergencyContact', existing?.emergencyContact),
     isWatchlisted: formString(form, 'isWatchlisted', existing?.isWatchlisted ? 'true' : 'false') === 'true',
-    notes: formString(form, 'notes', existing?.notes),
+    notes: nullableFormString(form, 'notes', existing?.notes),
   }
 }
 
-function bookingFromForm(form: FormData, existing?: Booking, referenceNumber?: string): Booking {
+function bookingPayloadFromForm(form: FormData, existing?: Booking) {
   return {
-    id: existing?.id ?? crypto.randomUUID(),
-    referenceNumber: existing?.referenceNumber ?? referenceNumber ?? 'BK-2026-0001',
     renterId: formString(form, 'renterId', existing?.renterId),
     vehicleId: formString(form, 'vehicleId', existing?.vehicleId),
-    driverId: formString(form, 'driverId', existing?.driverId) || undefined,
-    bookingType: formString(form, 'bookingType', existing?.bookingType ?? 'Self-drive') as Booking['bookingType'],
-    startDateTime: formString(form, 'startDateTime', existing?.startDateTime),
-    endDateTime: formString(form, 'endDateTime', existing?.endDateTime),
-    pickupLocation: formString(form, 'pickupLocation', existing?.pickupLocation),
-    returnLocation: formString(form, 'returnLocation', existing?.returnLocation),
-    rateType: formString(form, 'rateType', existing?.rateType ?? 'Daily') as Booking['rateType'],
+    driverId: nullableFormString(form, 'driverId', existing?.driverId),
+    bookingType: toApiBookingType(formString(form, 'bookingType', existing?.bookingType ?? 'Self-drive') as Booking['bookingType']),
+    startDateTime: formDateTimeOffset(form, 'startDateTime', existing?.startDateTime),
+    endDateTime: formDateTimeOffset(form, 'endDateTime', existing?.endDateTime),
+    pickupLocation: nullableFormString(form, 'pickupLocation', existing?.pickupLocation),
+    returnLocation: nullableFormString(form, 'returnLocation', existing?.returnLocation),
+    rateType: formString(form, 'rateType', existing?.rateType ?? 'Daily') as ApiRateType,
     rateAmount: formNumber(form, 'rateAmount', existing?.rateAmount ?? 0),
     securityDeposit: formNumber(form, 'securityDeposit', existing?.securityDeposit ?? 0),
     paymentStatus: formString(form, 'paymentStatus', existing?.paymentStatus ?? 'Unpaid') as Booking['paymentStatus'],
     bookingStatus: formString(form, 'bookingStatus', existing?.bookingStatus ?? 'Pending') as BookingStatus,
-    notes: formString(form, 'notes', existing?.notes),
+    notes: nullableFormString(form, 'notes', existing?.notes),
   }
 }
 
-function tripFromForm(form: FormData, existing: Trip): Trip {
+function tripPayloadFromForm(form: FormData, existing: Trip) {
   return {
-    ...existing,
-    bookingReference: formString(form, 'bookingReference', existing.bookingReference),
+    bookingId: existing.bookingId || null,
     vehicleId: formString(form, 'vehicleId', existing.vehicleId),
-    driverId: formString(form, 'driverId', existing.driverId) || undefined,
+    driverId: nullableFormString(form, 'driverId', existing.driverId),
     renterId: formString(form, 'renterId', existing.renterId),
-    tripType: formString(form, 'tripType', existing.tripType) as Trip['tripType'],
-    startDateTime: formString(form, 'startDateTime', existing.startDateTime),
-    endDateTime: formString(form, 'endDateTime', existing.endDateTime),
-    startingOdometer: formOptionalNumber(form, 'startingOdometer'),
-    endingOdometer: formOptionalNumber(form, 'endingOdometer'),
+    tripType: toApiTripType(formString(form, 'tripType', existing.tripType) as Trip['tripType']),
+    startDateTime: formDateTimeOffset(form, 'startDateTime', existing.startDateTime),
+    endDateTime: nullableFormDateTimeOffset(form, 'endDateTime', existing.endDateTime),
+    startingOdometer: nullableFormNumber(form, 'startingOdometer', existing.startingOdometer),
+    endingOdometer: nullableFormNumber(form, 'endingOdometer', existing.endingOdometer),
     fuelExpense: formNumber(form, 'fuelExpense', existing.fuelExpense),
     tollExpense: formNumber(form, 'tollExpense', existing.tollExpense),
     parkingExpense: formNumber(form, 'parkingExpense', existing.parkingExpense),
     otherExpenses: formNumber(form, 'otherExpenses', existing.otherExpenses),
     grossRevenue: formNumber(form, 'grossRevenue', existing.grossRevenue),
     driverProceedCommission: formNumber(form, 'driverProceedCommission', existing.driverProceedCommission),
-    paymentMethod: formString(form, 'paymentMethod', existing.paymentMethod),
+    paymentMethod: nullableFormString(form, 'paymentMethod', existing.paymentMethod),
     paymentStatus: formString(form, 'paymentStatus', existing.paymentStatus) as Trip['paymentStatus'],
-    remarks: formString(form, 'remarks', existing.remarks),
+    remarks: nullableFormString(form, 'remarks', existing.remarks),
     status: formString(form, 'status', existing.status) as TripStatus,
   }
 }
 
-function maintenanceFromForm(form: FormData, existing?: MaintenanceSchedule): MaintenanceSchedule {
+function maintenancePayloadFromForm(form: FormData, existing?: MaintenanceSchedule) {
   return {
-    id: existing?.id ?? crypto.randomUUID(),
     vehicleId: formString(form, 'vehicleId', existing?.vehicleId),
     title: formString(form, 'title', existing?.title ?? 'PMS'),
-    dueDate: formString(form, 'dueDate', existing?.dueDate),
-    dueOdometer: formNumber(form, 'dueOdometer', existing?.dueOdometer ?? 0),
-    status: formString(form, 'status', existing?.status ?? 'Upcoming') as MaintenanceSchedule['status'],
-    vendorShop: formString(form, 'vendorShop', existing?.vendorShop),
-    estimatedCost: formNumber(form, 'estimatedCost', existing?.estimatedCost ?? 0),
-    notes: formString(form, 'notes', existing?.notes),
+    dueDate: nullableFormString(form, 'dueDate', existing?.dueDate),
+    dueOdometer: nullableFormNumber(form, 'dueOdometer', existing?.dueOdometer),
+    reminderDaysBefore: 7,
+    reminderKilometersBefore: 500,
+    status: toApiMaintenanceStatus(formString(form, 'status', existing?.status ?? 'Upcoming') as MaintenanceSchedule['status']),
+    vendorShop: nullableFormString(form, 'vendorShop', existing?.vendorShop),
+    estimatedCost: nullableFormNumber(form, 'estimatedCost', existing?.estimatedCost),
+    notes: nullableFormString(form, 'notes', existing?.notes),
+  }
+}
+
+function formDateTimeOffset(form: FormData, name: string, fallback?: string) {
+  const rawValue = formString(form, name, fallback)
+  const date = new Date(rawValue)
+  return Number.isNaN(date.getTime()) ? rawValue : date.toISOString()
+}
+
+function nullableFormDateTimeOffset(form: FormData, name: string, fallback?: string) {
+  const rawValue = formString(form, name, fallback)
+  if (!rawValue) {
+    return null
+  }
+
+  const date = new Date(rawValue)
+  return Number.isNaN(date.getTime()) ? rawValue : date.toISOString()
+}
+
+function fromApiBookingType(value: ApiBookingType): Booking['bookingType'] {
+  switch (value) {
+    case 'SelfDrive':
+      return 'Self-drive'
+    case 'WithDriver':
+      return 'With driver'
+    case 'DeliveryLogistics':
+      return 'Delivery/logistics'
+    case 'CorporateLease':
+      return 'Corporate lease'
+    default:
+      return 'Self-drive'
+  }
+}
+
+function toApiBookingType(value: Booking['bookingType']): ApiBookingType {
+  switch (value) {
+    case 'Self-drive':
+      return 'SelfDrive'
+    case 'With driver':
+      return 'WithDriver'
+    case 'Delivery/logistics':
+      return 'DeliveryLogistics'
+    case 'Corporate lease':
+      return 'CorporateLease'
+    default:
+      return 'SelfDrive'
+  }
+}
+
+function fromApiTripType(value: ApiTripType): Trip['tripType'] {
+  return value === 'PrivateBooking' ? 'Private booking' : value
+}
+
+function toApiTripType(value: Trip['tripType']): ApiTripType {
+  return value === 'Private booking' ? 'PrivateBooking' : value
+}
+
+function fromApiMaintenanceStatus(value: ApiMaintenanceStatus): MaintenanceSchedule['status'] {
+  return value === 'DueSoon' ? 'Due Soon' : value
+}
+
+function toApiMaintenanceStatus(value: MaintenanceSchedule['status']): ApiMaintenanceStatus {
+  return value === 'Due Soon' ? 'DueSoon' : value
+}
+
+function fromApiNotificationType(value: ApiNotificationType): NotificationItem['type'] {
+  switch (value) {
+    case 'PmsReminder':
+      return 'PMS Reminder'
+    case 'DocumentExpiry':
+      return 'Document Expiry'
+    case 'DriverLicenseExpiry':
+      return 'Driver License Expiry'
+    default:
+      return value
   }
 }
 
@@ -3935,10 +4591,12 @@ function SafeImage({
   src,
   alt,
   fallback,
+  loading = 'lazy',
 }: {
   src?: string | null
   alt: string
   fallback: React.ReactNode
+  loading?: 'lazy' | 'eager'
 }) {
   const displayUrl = displayableAssetUrl(src)
   const [failed, setFailed] = useState(false)
@@ -3955,7 +4613,8 @@ function SafeImage({
     <img
       src={displayUrl}
       alt={alt}
-      loading="lazy"
+      loading={loading}
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />

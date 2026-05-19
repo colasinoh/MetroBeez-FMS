@@ -78,6 +78,7 @@ export type Booking = {
 export type Trip = {
   id: string
   tripNumber: string
+  bookingId?: string
   bookingReference?: string
   vehicleId: string
   driverId?: string

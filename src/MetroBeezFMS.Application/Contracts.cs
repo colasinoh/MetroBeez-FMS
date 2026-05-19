@@ -152,9 +152,13 @@ public sealed record RenterUpsertDto(
 public sealed record RenterListDto(
     Guid Id,
     string FullName,
+    string? Address,
     string? ContactNumber,
     string? Email,
     string? ValidIdType,
+    string? ValidIdNumber,
+    string? DriverLicenseNumber,
+    string? EmergencyContact,
     bool IsWatchlisted,
     string? Notes);
 
@@ -177,15 +181,23 @@ public sealed record BookingUpsertDto(
 public sealed record BookingListDto(
     Guid Id,
     string ReferenceNumber,
+    Guid RenterId,
+    Guid VehicleId,
+    Guid? DriverId,
     string RenterName,
     string VehicleLabel,
     string? DriverName,
     BookingType BookingType,
     DateTimeOffset StartDateTime,
     DateTimeOffset EndDateTime,
+    string? PickupLocation,
+    string? ReturnLocation,
+    RateType RateType,
     decimal RateAmount,
+    decimal SecurityDeposit,
     PaymentStatus PaymentStatus,
-    BookingStatus BookingStatus);
+    BookingStatus BookingStatus,
+    string? Notes);
 
 public sealed record TripUpsertDto(
     Guid? BookingId,
@@ -223,18 +235,31 @@ public sealed record TripStartRequest(int StartingOdometer, string? Remarks);
 public sealed record TripListDto(
     Guid Id,
     string TripNumber,
+    Guid? BookingId,
     string? BookingReference,
+    Guid VehicleId,
+    Guid? DriverId,
+    Guid RenterId,
     string VehicleLabel,
     string? DriverName,
     string RenterName,
     TripType TripType,
     DateTimeOffset StartDateTime,
     DateTimeOffset? EndDateTime,
+    int? StartingOdometer,
+    int? EndingOdometer,
     int TotalKilometers,
+    decimal FuelExpense,
+    decimal TollExpense,
+    decimal ParkingExpense,
+    decimal OtherExpenses,
     decimal GrossRevenue,
+    decimal DriverProceedCommission,
     decimal TotalExpenses,
     decimal NetProfit,
+    string? PaymentMethod,
     PaymentStatus PaymentStatus,
+    string? Remarks,
     TripStatus Status);
 
 public sealed record MaintenanceScheduleUpsertDto(
@@ -251,6 +276,7 @@ public sealed record MaintenanceScheduleUpsertDto(
 
 public sealed record MaintenanceScheduleDto(
     Guid Id,
+    Guid VehicleId,
     string VehicleLabel,
     string Title,
     DateOnly? DueDate,

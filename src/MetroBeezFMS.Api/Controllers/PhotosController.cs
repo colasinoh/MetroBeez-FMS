@@ -267,13 +267,7 @@ public sealed class PhotosController : ControllerBase
 
     private async Task<IReadOnlyList<PhotoDto>> ToPhotoDtosAsync(IEnumerable<DocumentAttachment> photos, CancellationToken cancellationToken)
     {
-        var items = new List<PhotoDto>();
-        foreach (var photo in photos)
-        {
-            items.Add(await ToPhotoDtoAsync(photo, cancellationToken));
-        }
-
-        return items;
+        return await Task.WhenAll(photos.Select(photo => ToPhotoDtoAsync(photo, cancellationToken)));
     }
 
     private async Task<PhotoDto> ToPhotoDtoAsync(DocumentAttachment photo, CancellationToken cancellationToken)

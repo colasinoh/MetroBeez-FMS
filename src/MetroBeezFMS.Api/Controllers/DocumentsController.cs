@@ -131,13 +131,7 @@ public sealed class DocumentsController : ControllerBase
 
     private async Task<IReadOnlyList<DocumentAttachmentDto>> ToDocumentDtosAsync(IEnumerable<DocumentAttachment> documents, CancellationToken cancellationToken)
     {
-        var items = new List<DocumentAttachmentDto>();
-        foreach (var document in documents)
-        {
-            items.Add(await ToDocumentDtoAsync(document, cancellationToken));
-        }
-
-        return items;
+        return await Task.WhenAll(documents.Select(document => ToDocumentDtoAsync(document, cancellationToken)));
     }
 
     private async Task<DocumentAttachmentDto> ToDocumentDtoAsync(DocumentAttachment document, CancellationToken cancellationToken)
