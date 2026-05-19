@@ -1788,7 +1788,8 @@ function BookingsPage({
 
   const addBooking = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const vehicleId = String(form.get('vehicleId'))
     const startDateTime = String(form.get('startDateTime'))
     const endDateTime = String(form.get('endDateTime'))
@@ -2417,7 +2418,8 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
     event.preventDefault()
     if (!model) return
 
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     try {
       const settings = await putJson<PublicPageManagement['settings']>('/api/public-page/settings', {
         enabled: form.get('enabled') === 'on',
@@ -2647,9 +2649,23 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
     event.preventDefault()
     if (!tenantSlug) return
 
-    const form = new FormData(event.currentTarget)
-    const startValue = formString(form, 'startDateTime')
-    const endValue = formString(form, 'endDateTime')
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    let startDateTime: Date
+    let endDateTime: Date
+    try {
+      startDateTime = publicDateTimeFromForm(form, 'start')
+      endDateTime = publicDateTimeFromForm(form, 'end')
+    } catch (error) {
+      showToast({ title: 'Inquiry not sent', detail: error instanceof Error ? error.message : 'Choose a valid start and end date/time.' })
+      return
+    }
+
+    if (endDateTime <= startDateTime) {
+      showToast({ title: 'Inquiry not sent', detail: 'End date/time must be after the start date/time.' })
+      return
+    }
+
     setSubmitting(true)
     try {
       await postJson(`/api/public/${encodeURIComponent(tenantSlug)}/booking-inquiries`, {
@@ -2657,11 +2673,11 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
         renterName: formString(form, 'renterName'),
         contactNumber: formString(form, 'contactNumber'),
         email: formString(form, 'email') || null,
-        startDateTime: new Date(startValue).toISOString(),
-        endDateTime: new Date(endValue).toISOString(),
+        startDateTime: startDateTime.toISOString(),
+        endDateTime: endDateTime.toISOString(),
         message: formString(form, 'message') || null,
       })
-      event.currentTarget.reset()
+      formElement.reset()
       setSelectedVehicleId(page?.vehicles[0]?.vehicleId || '')
       showToast({ title: 'Inquiry sent', detail: 'The fleet owner will review your booking request.' })
     } catch (error) {
@@ -2759,8 +2775,10 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
             <label><span>Name</span><input name="renterName" required /></label>
             <label><span>Contact number</span><input name="contactNumber" required /></label>
             <label><span>Email</span><input name="email" type="email" /></label>
-            <label><span>Start date/time</span><input name="startDateTime" type="datetime-local" required /></label>
-            <label><span>End date/time</span><input name="endDateTime" type="datetime-local" required /></label>
+            <label><span>Start date</span><input name="startDate" type="date" required /></label>
+            <label><span>Start time</span><input name="startTime" type="time" required /></label>
+            <label><span>End date</span><input name="endDate" type="date" required /></label>
+            <label><span>End time</span><input name="endTime" type="time" required /></label>
             <label className="public-form-wide"><span>Message</span><textarea name="message" rows={4} /></label>
             <button className="public-submit-button" type="submit" disabled={submitting}>{submitting ? 'Sending...' : 'Send inquiry'}</button>
           </form>
@@ -3030,7 +3048,8 @@ function SettingsPage({
       return
     }
 
-    const form = new FormData(event.currentTarget)
+    const passwordFormElement = event.currentTarget
+    const form = new FormData(passwordFormElement)
     const currentPassword = String(form.get('currentPassword'))
     const newPassword = String(form.get('newPassword'))
     const confirmPassword = String(form.get('confirmPassword'))
@@ -3041,7 +3060,7 @@ function SettingsPage({
 
     try {
       await postJson('/api/auth/change-password', { currentPassword, newPassword }, session.token)
-      event.currentTarget.reset()
+      passwordFormElement.reset()
       showToast({ title: 'Password changed', detail: 'Use the new password the next time you sign in.' })
     } catch (error) {
       showToast({ title: 'Password not changed', detail: error instanceof Error ? error.message : 'Please check the current password.' })
@@ -3821,12 +3840,10 @@ function EntityPhotosPanel({
                 <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={24} />} />
                 <span><Maximize2 size={14} /> Open</span>
               </button>
+              <button className="photo-remove-button" type="button" title="Remove photo" onClick={() => removePhoto(photo)}><Trash2 size={15} /></button>
               <div className="photo-card-body">
                 <span className="photo-name">{photo.caption || photo.originalFileName}</span>
                 {photo.isPublic && <Badge status="Public" />}
-                <div className="photo-actions">
-                  <button className="icon-button danger" type="button" title="Remove photo" onClick={() => removePhoto(photo)}><Trash2 size={15} /></button>
-                </div>
               </div>
             </article>
           )
@@ -4150,6 +4167,17 @@ function nullableFormNumber(form: FormData, name: string, fallback?: string | nu
 function formNumber(form: FormData, name: string, fallback = 0) {
   const value = Number(form.get(name))
   return Number.isFinite(value) ? value : fallback
+}
+
+function publicDateTimeFromForm(form: FormData, prefix: 'start' | 'end') {
+  const date = formString(form, `${prefix}Date`)
+  const time = formString(form, `${prefix}Time`)
+  const value = new Date(`${date}T${time}`)
+  if (!date || !time || Number.isNaN(value.getTime())) {
+    throw new Error('Choose a valid start and end date/time.')
+  }
+
+  return value
 }
 
 function parseCustomFeatures(value: string) {
