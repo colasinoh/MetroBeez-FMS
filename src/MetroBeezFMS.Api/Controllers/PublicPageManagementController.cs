@@ -118,6 +118,40 @@ public sealed class PublicPageManagementController : ControllerBase
             profile.PublicBookingInstructions));
     }
 
+    [HttpGet("booking-inquiries")]
+    public async Task<ActionResult<IReadOnlyList<PublicBookingInquiryDto>>> ListBookingInquiries([FromQuery] Guid? vehicleId, CancellationToken cancellationToken)
+    {
+        await using var db = await _tenantDbContextFactory.CreateAsync(cancellationToken);
+        var query = db.PublicBookingInquiries
+            .AsNoTracking()
+            .Include(x => x.Vehicle)
+            .AsQueryable();
+
+        if (vehicleId is not null)
+        {
+            query = query.Where(x => x.VehicleId == vehicleId.Value);
+        }
+
+        var inquiries = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        return Ok(inquiries.Select(ToInquiryDto).ToList());
+    }
+
+    [HttpGet("booking-inquiries/{id:guid}")]
+    public async Task<ActionResult<PublicBookingInquiryDto>> GetBookingInquiry(Guid id, CancellationToken cancellationToken)
+    {
+        await using var db = await _tenantDbContextFactory.CreateAsync(cancellationToken);
+        var inquiry = await db.PublicBookingInquiries
+            .AsNoTracking()
+            .Include(x => x.Vehicle)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        return inquiry is null ? NotFound() : Ok(ToInquiryDto(inquiry));
+    }
+
     [HttpPut("vehicles/{vehicleId:guid}")]
     public async Task<ActionResult<PublicVehicleListingDto>> UpdateVehicleListing(Guid vehicleId, UpdatePublicVehicleListingRequest request, CancellationToken cancellationToken)
     {
@@ -337,6 +371,27 @@ public sealed class PublicPageManagementController : ControllerBase
             string.IsNullOrWhiteSpace(feature.CustomIcon) ? "+" : feature.CustomIcon,
             true,
             feature.DisplayOrder);
+    }
+
+    private static PublicBookingInquiryDto ToInquiryDto(PublicBookingInquiry inquiry)
+    {
+        return new PublicBookingInquiryDto(
+            inquiry.Id,
+            inquiry.VehicleId,
+            VehicleLabel(inquiry.Vehicle),
+            inquiry.RenterName,
+            inquiry.ContactNumber,
+            inquiry.Email,
+            inquiry.StartDateTime,
+            inquiry.EndDateTime,
+            inquiry.Message,
+            inquiry.Status,
+            inquiry.CreatedAt);
+    }
+
+    private static string? VehicleLabel(Vehicle? vehicle)
+    {
+        return vehicle is null ? null : $"{vehicle.PlateNumber} - {vehicle.YearModel} {vehicle.Make} {vehicle.Model}";
     }
 
     private static string? TrimToNull(string? value)

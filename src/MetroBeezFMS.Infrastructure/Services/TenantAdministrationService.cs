@@ -43,6 +43,27 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
         return tenants.Select(tenant => ToDto(tenant, owners.GetValueOrDefault(tenant.OwnerUserId))).ToList();
     }
 
+    public async Task<AdminTenantDetailDto> GetTenantDetailAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        var tenant = await _centralDbContext.Tenants
+            .Include(x => x.Users)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == tenantId, cancellationToken)
+            ?? throw new KeyNotFoundException("Tenant was not found.");
+
+        var owner = await _centralDbContext.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == tenant.OwnerUserId, cancellationToken);
+        var supportTickets = await _centralDbContext.SupportTickets
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenant.Id)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+        var tickets = supportTickets.Select(x => ToSupportTicketDto(x, tenant.Name)).ToList();
+
+        var vehicles = await ListTenantVehiclesAsync(tenant, cancellationToken);
+        return new AdminTenantDetailDto(ToDto(tenant, owner), vehicles, tickets);
+    }
+
     public async Task<AdminTenantDto> UpdateStatusAsync(Guid tenantId, TenantStatus status, CancellationToken cancellationToken = default)
     {
         var tenant = await _centralDbContext.Tenants
@@ -183,6 +204,29 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
         await dropCommand.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private async Task<IReadOnlyList<AdminTenantVehicleDto>> ListTenantVehiclesAsync(Tenant tenant, CancellationToken cancellationToken)
+    {
+        var options = new DbContextOptionsBuilder<TenantDbContext>()
+            .UseNpgsql(DatabaseConnectionFactory.BuildTenantConnectionString(_configuration, tenant.DatabaseName))
+            .Options;
+
+        await using var db = new TenantDbContext(options);
+        return await db.Vehicles
+            .AsNoTracking()
+            .OrderBy(x => x.PlateNumber)
+            .Select(x => new AdminTenantVehicleDto(
+                x.Id,
+                x.PlateNumber,
+                x.Make,
+                x.Model,
+                x.YearModel,
+                x.VehicleType,
+                x.FuelType,
+                x.PassengerCapacity,
+                x.Status))
+            .ToListAsync(cancellationToken);
+    }
+
     private static AdminTenantDto ToDto(Tenant tenant, AppUser? owner)
     {
         return new AdminTenantDto(
@@ -198,6 +242,21 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
             tenant.Users.Count,
             tenant.CreatedAt,
             tenant.UpdatedAt);
+    }
+
+    private static SupportTicketDto ToSupportTicketDto(SupportTicket ticket, string tenantName)
+    {
+        return new SupportTicketDto(
+            ticket.Id,
+            ticket.TenantId,
+            tenantName,
+            ticket.RequesterUserId,
+            ticket.RequesterName,
+            ticket.RequesterEmail,
+            ticket.Subject,
+            ticket.Message,
+            ticket.Status,
+            ticket.CreatedAt);
     }
 
     private static IEnumerable<string> StorageRootsFor(Tenant tenant)

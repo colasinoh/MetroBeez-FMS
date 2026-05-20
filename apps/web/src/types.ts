@@ -227,6 +227,20 @@ export type PublicTenantPage = {
   vehicles: PublicTenantVehicle[]
 }
 
+export type PublicBookingInquiry = {
+  id: string
+  vehicleId?: string | null
+  vehicleLabel?: string | null
+  renterName: string
+  contactNumber: string
+  email?: string | null
+  startDateTime: string
+  endDateTime: string
+  message?: string | null
+  status: string
+  createdAt: string
+}
+
 export type NotificationItem = {
   id: string
   title: string
@@ -234,4 +248,6 @@ export type NotificationItem = {
   type: 'Info' | 'Booking' | 'PMS Reminder' | 'Document Expiry' | 'Driver License Expiry' | 'Warning'
   isRead: boolean
   createdAt: string
+  relatedEntityType?: string | null
+  relatedEntityId?: string | null
 }

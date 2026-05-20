@@ -84,6 +84,7 @@ public sealed class PublicTenantController : ControllerBase
             return ValidationProblem("This vehicle is not available on the public booking page.");
         }
 
+        var vehicle = await db.Vehicles.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.VehicleId, cancellationToken);
         var inquiry = new PublicBookingInquiry
         {
             VehicleId = request.VehicleId,
@@ -107,7 +108,7 @@ public sealed class PublicTenantController : ControllerBase
         });
         await db.SaveChangesAsync(cancellationToken);
 
-        return CreatedAtAction(nameof(Get), new { slug }, ToInquiryDto(inquiry));
+        return CreatedAtAction(nameof(Get), new { slug }, ToInquiryDto(inquiry, vehicle));
     }
 
     private async Task<Tenant?> FindPublicTenantAsync(string slug, CancellationToken cancellationToken)
@@ -203,11 +204,12 @@ public sealed class PublicTenantController : ControllerBase
         return new PublicVehicleFeatureDto(null, feature.CustomLabel ?? "Custom feature", string.IsNullOrWhiteSpace(feature.CustomIcon) ? "+" : feature.CustomIcon, true, feature.DisplayOrder);
     }
 
-    private static PublicBookingInquiryDto ToInquiryDto(PublicBookingInquiry inquiry)
+    private static PublicBookingInquiryDto ToInquiryDto(PublicBookingInquiry inquiry, Vehicle? vehicle)
     {
         return new PublicBookingInquiryDto(
             inquiry.Id,
             inquiry.VehicleId,
+            VehicleLabel(vehicle),
             inquiry.RenterName,
             inquiry.ContactNumber,
             inquiry.Email,
@@ -216,6 +218,11 @@ public sealed class PublicTenantController : ControllerBase
             inquiry.Message,
             inquiry.Status,
             inquiry.CreatedAt);
+    }
+
+    private static string? VehicleLabel(Vehicle? vehicle)
+    {
+        return vehicle is null ? null : $"{vehicle.PlateNumber} - {vehicle.YearModel} {vehicle.Make} {vehicle.Model}";
     }
 
     private static string? TrimToNull(string? value)

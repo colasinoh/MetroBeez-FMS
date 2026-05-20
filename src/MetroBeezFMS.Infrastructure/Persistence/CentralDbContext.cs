@@ -14,6 +14,8 @@ public sealed class CentralDbContext : IdentityDbContext<AppUser, IdentityRole<G
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantUser> TenantUsers => Set<TenantUser>();
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+    public DbSet<SystemAnnouncement> SystemAnnouncements => Set<SystemAnnouncement>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -62,6 +64,28 @@ public sealed class CentralDbContext : IdentityDbContext<AppUser, IdentityRole<G
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SupportTicket>(entity =>
+        {
+            entity.ToTable("SupportTickets");
+            entity.Property(x => x.RequesterName).HasMaxLength(180);
+            entity.Property(x => x.RequesterEmail).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany(x => x.SupportTickets)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SystemAnnouncement>(entity =>
+        {
+            entity.ToTable("SystemAnnouncements");
+            entity.Property(x => x.Title).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(1200).IsRequired();
+            entity.HasIndex(x => new { x.IsActive, x.StartsAt, x.EndsAt });
         });
     }
 }

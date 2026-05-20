@@ -441,7 +441,8 @@ td small,
 }
 
 .dashboard-grid,
-.two-column {
+.two-column,
+.support-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
@@ -568,6 +569,14 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover td {
+  background: var(--soft);
+}
+
 .table-link {
   color: var(--blue);
   font-weight: 900;
@@ -656,6 +665,22 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.inquiry-details {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.inquiry-details .detail-grid {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.inquiry-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -717,6 +742,11 @@ tr:last-child td {
   grid-template-columns: 110px 1fr 100px;
   align-items: center;
   gap: 12px;
+}
+
+.bar-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .bar-row div {
@@ -890,6 +920,31 @@ tr:last-child td {
 
 .settings-actions {
   justify-content: flex-start;
+}
+
+.legal-link-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.legal-link-grid a {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.legal-link-grid strong {
+  color: var(--blue);
+}
+
+.legal-link-grid small {
+  color: var(--muted);
 }
 
 .form-actions {
@@ -1739,6 +1794,89 @@ tr:last-child td {
   font-weight: 400;
 }
 
+.auth-links {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.announcement-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #f4d36a;
+  border-radius: var(--radius);
+  background: var(--gold-2);
+  color: var(--blue);
+}
+
+.announcement-banner small,
+.announcement-banner strong {
+  display: block;
+}
+
+.announcement-banner small {
+  margin-top: 3px;
+  color: #665017;
+}
+
+.legal-shell {
+  min-height: 100svh;
+  padding: 34px 18px;
+  background: var(--soft);
+}
+
+.legal-panel {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.legal-brand {
+  color: var(--blue);
+  margin-bottom: 20px;
+}
+
+.legal-brand small {
+  color: var(--muted);
+}
+
+.legal-panel h1 {
+  margin: 0 0 18px;
+}
+
+.legal-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.legal-copy h2 {
+  margin: 10px 0 0;
+  color: var(--blue);
+  font-size: 18px;
+}
+
+.legal-copy p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.65;
+}
+
+.legal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .toast {
   position: fixed;
   right: 22px;
@@ -1830,6 +1968,7 @@ tr:last-child td {
 
   .dashboard-grid,
   .two-column,
+  .support-layout,
   .card-grid,
   .calendar-strip,
   .form-grid,

@@ -24,7 +24,52 @@ public sealed record AdminTenantDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt);
 
+public sealed record AdminTenantVehicleDto(
+    Guid Id,
+    string PlateNumber,
+    string Make,
+    string Model,
+    int YearModel,
+    string? VehicleType,
+    string? FuelType,
+    int PassengerCapacity,
+    VehicleStatus Status);
+
+public sealed record AdminTenantDetailDto(
+    AdminTenantDto Tenant,
+    IEnumerable<AdminTenantVehicleDto> Vehicles,
+    IEnumerable<SupportTicketDto> SupportTickets);
+
 public sealed record UpdateTenantStatusRequest(TenantStatus Status);
+public sealed record SupportTicketRequest(string Subject, string Message);
+public sealed record SupportTicketDto(
+    Guid Id,
+    Guid TenantId,
+    string TenantName,
+    Guid RequesterUserId,
+    string? RequesterName,
+    string RequesterEmail,
+    string Subject,
+    string Message,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+public sealed record SystemAnnouncementRequest(
+    string Title,
+    string Message,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    bool IsActive);
+
+public sealed record SystemAnnouncementDto(
+    Guid Id,
+    string Title,
+    string Message,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    bool IsActive,
+    DateTimeOffset CreatedAt);
+
 public sealed record CompanyProfileRequest(string CompanyName, string? BusinessAddress, string? ContactNumber, string? BirDtiLguDocumentUrl, string? LogoUrl);
 public sealed record UserProfileDto(
     Guid UserId,
@@ -424,6 +469,7 @@ public sealed record PublicBookingInquiryRequest(
 public sealed record PublicBookingInquiryDto(
     Guid Id,
     Guid? VehicleId,
+    string? VehicleLabel,
     string RenterName,
     string ContactNumber,
     string? Email,

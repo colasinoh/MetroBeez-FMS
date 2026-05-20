@@ -24,7 +24,9 @@ import {
   LogOut,
   MailCheck,
   Maximize2,
+  Megaphone,
   Menu,
+  MessageSquare,
   Moon,
   Plus,
   Route as RouteIcon,
@@ -72,6 +74,7 @@ import type {
   MaintenanceSchedule,
   NotificationItem,
   PhotoItem,
+  PublicBookingInquiry,
   PublicPageManagement,
   PublicTenantPage,
   PublicTenantVehicle,
@@ -102,11 +105,13 @@ const tenantNavItems = [
   { to: '/public-page', label: 'Public Page', icon: Globe2 },
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/support', label: 'Support', icon: MessageSquare },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
 const platformNavItems = [
   { to: '/admin/tenants', label: 'Tenants', icon: ShieldCheck },
+  { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
 ]
 
 const documentEntityTypes = ['Vehicle', 'Driver', 'Renter', 'Booking', 'Trip', 'Maintenance'] as const
@@ -179,6 +184,47 @@ type AdminTenant = {
   updatedAt?: string
 }
 
+type AdminTenantVehicle = {
+  id: string
+  plateNumber: string
+  make: string
+  model: string
+  yearModel: number
+  vehicleType?: string | null
+  fuelType?: string | null
+  passengerCapacity: number
+  status: 'Available' | 'Booked' | 'UnderMaintenance' | 'Inactive'
+}
+
+type SupportTicket = {
+  id: string
+  tenantId: string
+  tenantName: string
+  requesterUserId: string
+  requesterName?: string | null
+  requesterEmail: string
+  subject: string
+  message: string
+  status: string
+  createdAt: string
+}
+
+type AdminTenantDetail = {
+  tenant: AdminTenant
+  vehicles: AdminTenantVehicle[]
+  supportTickets: SupportTicket[]
+}
+
+type SystemAnnouncement = {
+  id: string
+  title: string
+  message: string
+  startsAt: string
+  endsAt: string
+  isActive: boolean
+  createdAt: string
+}
+
 type AppData = {
   vehicles: Vehicle[]
   drivers: Driver[]
@@ -188,6 +234,7 @@ type AppData = {
   maintenance: MaintenanceSchedule[]
   documents: DocumentAttachment[]
   notifications: NotificationItem[]
+  publicInquiries: PublicBookingInquiry[]
   audits: AuditEntry[]
 }
 
@@ -680,11 +727,12 @@ function App() {
   const [maintenance, setMaintenance] = useState(maintenanceSeed)
   const [documents, setDocuments] = useState(documentsSeed)
   const [notifications, setNotifications] = useState(notificationsSeed)
+  const [publicInquiries, setPublicInquiries] = useState<PublicBookingInquiry[]>([])
   const [auditEntries, setAuditEntries] = useState(initialAuditEntries)
   const [toast, setToast] = useState<Toast | null>(null)
   const [clientGravatarUrl, setClientGravatarUrl] = useState('')
 
-  const data = { vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications, audits: auditEntries }
+  const data = { vehicles, drivers, renters, bookings, trips, maintenance, documents, notifications, publicInquiries, audits: auditEntries }
   const showToast = (nextToast: Toast) => {
     setToast(nextToast)
     window.setTimeout(() => setToast(null), 3200)
@@ -745,8 +793,9 @@ function App() {
       getJson<MaintenanceApiDto[]>('/api/maintenance', session.token),
       getJson<DocumentAttachment[]>('/api/documents', session.token),
       getJson<NotificationApiDto[]>('/api/notifications', session.token),
+      getJson<PublicBookingInquiry[]>('/api/public-page/booking-inquiries', session.token),
     ])
-      .then(([apiVehicles, apiDrivers, apiRenters, apiBookings, apiTrips, apiMaintenance, apiDocuments, apiNotifications]) => {
+      .then(([apiVehicles, apiDrivers, apiRenters, apiBookings, apiTrips, apiMaintenance, apiDocuments, apiNotifications, apiPublicInquiries]) => {
         if (!active) return
         if (apiVehicles.status === 'fulfilled') setVehicles(apiVehicles.value.map(vehicleFromApi))
         if (apiDrivers.status === 'fulfilled') setDrivers(apiDrivers.value.map(driverFromApi))
@@ -756,6 +805,7 @@ function App() {
         if (apiMaintenance.status === 'fulfilled') setMaintenance(apiMaintenance.value.map(maintenanceFromApi))
         if (apiDocuments.status === 'fulfilled') setDocuments(apiDocuments.value.filter((item) => !item.isPhoto))
         if (apiNotifications.status === 'fulfilled') setNotifications(apiNotifications.value.map(notificationFromApi))
+        if (apiPublicInquiries.status === 'fulfilled') setPublicInquiries(apiPublicInquiries.value)
       })
 
     return () => {
@@ -822,6 +872,8 @@ function App() {
         <Route path="/reset-password" element={<ResetPasswordPage showToast={showToast} />} />
         <Route path="/register" element={<RegisterPage showToast={showToast} />} />
         <Route path="/verify-email" element={<VerifyEmailPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
         <Route
           path="/onboarding"
           element={<OnboardingPage company={company} session={session} setCompany={setCompany} showToast={showToast} />}
@@ -841,6 +893,8 @@ function App() {
         >
           <Route index element={<Navigate to={session?.role === 'SuperAdmin' ? '/admin/tenants' : '/dashboard'} replace />} />
           <Route path="/admin/tenants" element={<PlatformTenantsPage session={session} showToast={showToast} />} />
+          <Route path="/admin/tenants/:id" element={<PlatformTenantDetailsPage session={session} showToast={showToast} />} />
+          <Route path="/admin/announcements" element={<PlatformAnnouncementsPage session={session} showToast={showToast} />} />
           <Route path="/dashboard" element={session?.role === 'SuperAdmin' ? <Navigate to="/admin/tenants" replace /> : <DashboardPage data={data} />} />
           <Route
             path="/vehicles"
@@ -884,9 +938,10 @@ function App() {
           />
           <Route
             path="/notifications"
-            element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} session={session} showToast={showToast} />}
+            element={<NotificationsPage data={data} notifications={notifications} setNotifications={setNotifications} setPublicInquiries={setPublicInquiries} session={session} showToast={showToast} />}
           />
           <Route path="/reports" element={<ReportsPage data={data} />} />
+          <Route path="/support" element={<SupportPage session={session} userProfile={userProfile} showToast={showToast} />} />
           <Route
             path="/settings"
             element={<SettingsPage company={company} setCompany={setCompany} session={session} setSession={setSession} userProfile={userProfile} clientGravatarUrl={clientGravatarUrl} setUserProfile={setUserProfile} showToast={showToast} />}
@@ -984,6 +1039,8 @@ function DashboardPage({ data }: { data: AppData }) {
   const gross = sum(monthlyTrips.map((trip) => trip.grossRevenue))
   const net = sum(monthlyTrips.map((trip) => netProfit(trip)))
   const fuelToll = sum(monthlyTrips.map((trip) => trip.fuelExpense + trip.tollExpense))
+  const inquiryCounts = inquiryCountsByVehicle(data)
+  const maxInquiryCount = Math.max(...inquiryCounts.map((item) => item.count), 1)
 
   return (
     <Page>
@@ -1001,6 +1058,7 @@ function DashboardPage({ data }: { data: AppData }) {
         <MetricCard icon={CircleDollarSign} label="Monthly gross" value={money.format(gross)} tone="green" />
         <MetricCard icon={WalletCards} label="Monthly net" value={money.format(net)} tone="blue" />
         <MetricCard icon={Fuel} label="Fuel + toll" value={money.format(fuelToll)} tone="red" />
+        <MetricCard icon={MailCheck} label="Public inquiries" value={data.publicInquiries.length.toString()} tone="gold" />
       </section>
       <section className="dashboard-grid">
         <Panel title="Recent bookings" action={<Link to="/bookings">View all</Link>}>
@@ -1029,6 +1087,21 @@ function DashboardPage({ data }: { data: AppData }) {
             ))}
           </CompactList>
         </Panel>
+        <Panel title="Top inquiry vehicles" action={<Link to="/reports">Insights</Link>}>
+          {inquiryCounts.length > 0 ? (
+            <div className="bar-list">
+              {inquiryCounts.slice(0, 5).map((item) => (
+                <div className="bar-row" key={item.key}>
+                  <span>{item.label}</span>
+                  <div><i style={{ width: `${(item.count / maxInquiryCount) * 100}%` }} /></div>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No inquiries yet" detail="Public booking inquiries will appear here." />
+          )}
+        </Panel>
         <Panel title="Expiring documents" action={<Link to="/documents">Review</Link>}>
           <CompactList>
             {data.documents
@@ -1044,7 +1117,7 @@ function DashboardPage({ data }: { data: AppData }) {
               ))}
           </CompactList>
         </Panel>
-        <Panel title="Driver activity" action={<Link to="/notifications">Open</Link>}>
+        <Panel title="Alerts & inquiries" action={<Link to="/notifications">Open</Link>}>
           <CompactList>
             {data.notifications.map((item) => (
               <li key={item.id}>
@@ -1069,6 +1142,7 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<AdminTenant | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (!session?.token || session.role !== 'SuperAdmin') {
@@ -1154,7 +1228,7 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
           </thead>
           <tbody>
             {filteredTenants.map((tenant) => (
-              <tr key={tenant.id}>
+              <tr className="clickable-row" key={tenant.id} onClick={() => navigate(`/admin/tenants/${tenant.id}`)}>
                 <td>
                   <strong>{tenant.name}</strong>
                   <small>{tenant.slug} - {tenant.subscriptionStatus}</small>
@@ -1167,14 +1241,14 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
                 <td>{tenant.userCount}</td>
                 <td>
                   <label className="compact-select">
-                    <select value={tenant.status} onChange={(event) => updateTenantStatus(tenant, event.target.value as TenantStatus)}>
+                    <select value={tenant.status} onClick={(event) => event.stopPropagation()} onChange={(event) => updateTenantStatus(tenant, event.target.value as TenantStatus)}>
                       {tenantStatusOptions.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
                     </select>
                   </label>
                 </td>
                 <td>{dateText(tenant.createdAt)}</td>
                 <td className="table-actions">
-                  <button className="icon-button danger" type="button" title="Delete tenant" onClick={() => setDeleteTarget(tenant)}><Trash2 size={16} /></button>
+                  <button className="icon-button danger" type="button" title="Delete tenant" onClick={(event) => { event.stopPropagation(); setDeleteTarget(tenant) }}><Trash2 size={16} /></button>
                 </td>
               </tr>
             ))}
@@ -1190,6 +1264,205 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
         onCancel={() => setDeleteTarget(null)}
         onConfirm={deleteTenant}
       />
+    </Page>
+  )
+}
+
+function PlatformTenantDetailsPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
+  const { id } = useParams()
+  const [detail, setDetail] = useState<AdminTenantDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!session?.token || session.role !== 'SuperAdmin' || !id) {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<AdminTenantDetail>(`/api/admin/tenants/${id}`, session.token)
+      .then((item) => {
+        if (active) {
+          setDetail(item)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Tenant not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [id, session?.token, session?.role])
+
+  if (!session || session.role !== 'SuperAdmin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  if (loading) {
+    return <Page><PageHeader eyebrow="Platform" title="Tenant details" action={<BackLink to="/admin/tenants" label="Back to tenants" />} /><EmptyState title="Loading tenant" detail="Fetching tenant workspace details." /></Page>
+  }
+
+  if (!detail) {
+    return <NotFound title="Tenant not found" />
+  }
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Tenant workspace" title={detail.tenant.name} action={<BackLink to="/admin/tenants" label="Back to tenants" />} />
+      <Panel title="Tenant details">
+        <DetailGrid
+          items={[
+            ['Owner', detail.tenant.ownerName || 'No owner name'],
+            ['Owner email', detail.tenant.ownerEmail || detail.tenant.ownerUserId],
+            ['Status', statusLabel(detail.tenant.status)],
+            ['Subscription', detail.tenant.subscriptionStatus],
+            ['Slug', detail.tenant.slug],
+            ['Database', detail.tenant.databaseName],
+            ['Users', detail.tenant.userCount.toString()],
+            ['Created', dateText(detail.tenant.createdAt)],
+          ]}
+        />
+      </Panel>
+      <TwoColumn>
+        <Panel title="Vehicles">
+          <Table>
+            <thead>
+              <tr><th>Plate</th><th>Vehicle</th><th>Type</th><th>Capacity</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {detail.vehicles.map((vehicle) => (
+                <tr key={vehicle.id}>
+                  <td><strong>{vehicle.plateNumber}</strong></td>
+                  <td>{vehicle.yearModel} {vehicle.make} {vehicle.model}<small>{vehicle.fuelType || 'No fuel type'}</small></td>
+                  <td>{vehicle.vehicleType || 'N/A'}</td>
+                  <td>{vehicle.passengerCapacity}</td>
+                  <td><Badge status={platformVehicleStatusLabel(vehicle.status)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          {detail.vehicles.length === 0 && <EmptyState title="No vehicles" detail="This tenant has no vehicle records yet." />}
+        </Panel>
+        <Panel title="Support tickets">
+          <CompactList>
+            {detail.supportTickets.map((ticket) => (
+              <li key={ticket.id}>
+                <span>
+                  <strong>{ticket.subject}</strong>
+                  <small>{ticket.requesterName || ticket.requesterEmail} - {dateTimeText(ticket.createdAt)}</small>
+                  <small>{ticket.message}</small>
+                </span>
+                <Badge status={ticket.status} />
+              </li>
+            ))}
+          </CompactList>
+          {detail.supportTickets.length === 0 && <EmptyState title="No support tickets" detail="Tenant support messages will appear here." />}
+        </Panel>
+      </TwoColumn>
+    </Page>
+  )
+}
+
+function PlatformAnnouncementsPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!session?.token || session.role !== 'SuperAdmin') {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<SystemAnnouncement[]>('/api/admin/announcements', session.token)
+      .then((items) => {
+        if (active) {
+          setAnnouncements(items)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Announcements not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.role])
+
+  if (!session || session.role !== 'SuperAdmin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const createAnnouncement = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    try {
+      const saved = await postJson<SystemAnnouncement>('/api/admin/announcements', {
+        title: formString(form, 'title').trim(),
+        message: formString(form, 'message').trim(),
+        startsAt: formDateTimeOffset(form, 'startsAt'),
+        endsAt: formDateTimeOffset(form, 'endsAt'),
+        isActive: form.get('isActive') === 'on',
+      }, session.token)
+      setAnnouncements((current) => [saved, ...current])
+      formElement.reset()
+      showToast({ title: 'Announcement posted', detail: 'The login page will show it during the scheduled window.' })
+    } catch (error) {
+      showToast({ title: 'Announcement not saved', detail: error instanceof Error ? error.message : 'Please review the schedule.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Platform" title="Announcements" />
+      <TwoColumn>
+        <Panel title="System maintenance announcement">
+          <form className="modal-form" onSubmit={createAnnouncement}>
+            <Field label="Title" name="title" defaultValue="Scheduled system maintenance" required />
+            <label className="field full"><span>Message</span><textarea name="message" defaultValue="BeezFleet will undergo scheduled maintenance. Some features may be temporarily unavailable during this window." required /></label>
+            <Field label="Start date/time" name="startsAt" type="datetime-local" required />
+            <Field label="End date/time" name="endsAt" type="datetime-local" required />
+            <label className="toggle-row form-toggle"><input name="isActive" type="checkbox" defaultChecked /> Active</label>
+            <button className="primary-button full" type="submit" disabled={submitting}><Megaphone size={18} /> {submitting ? 'Posting...' : 'Post announcement'}</button>
+          </form>
+        </Panel>
+        <Panel title="Recent announcements">
+          <CompactList>
+            {announcements.map((announcement) => (
+              <li key={announcement.id}>
+                <span>
+                  <strong>{announcement.title}</strong>
+                  <small>{dateTimeText(announcement.startsAt)} - {dateTimeText(announcement.endsAt)}</small>
+                  <small>{announcement.message}</small>
+                </span>
+                <Badge status={announcement.isActive ? 'Active' : 'Inactive'} />
+              </li>
+            ))}
+          </CompactList>
+          {loading && <EmptyState title="Loading announcements" detail="Fetching platform notices." />}
+          {!loading && announcements.length === 0 && <EmptyState title="No announcements" detail="Create one to show it on the login page." />}
+        </Panel>
+      </TwoColumn>
     </Page>
   )
 }
@@ -2798,18 +3071,28 @@ function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) 
 }
 
 function NotificationsPage({
+  data,
   notifications,
   setNotifications,
+  setPublicInquiries,
   session,
   showToast,
 }: {
+  data: AppData
   notifications: NotificationItem[]
   setNotifications: React.Dispatch<React.SetStateAction<NotificationItem[]>>
+  setPublicInquiries: React.Dispatch<React.SetStateAction<PublicBookingInquiry[]>>
   session: AuthSession | null
   showToast: (toast: Toast) => void
 }) {
   const [query, setQuery] = useState('')
+  const [selectedInquiry, setSelectedInquiry] = useState<PublicBookingInquiry | null>(null)
+  const [loadingInquiryId, setLoadingInquiryId] = useState<string | null>(null)
   const filtered = notifications.filter((item) => [item.title, item.message, item.type].join(' ').toLowerCase().includes(query.toLowerCase()))
+
+  const isInquiryNotification = (item: NotificationItem) =>
+    item.relatedEntityType === 'PublicBookingInquiry' && Boolean(item.relatedEntityId)
+
   const markRead = async (item: NotificationItem) => {
     if (!session?.token) {
       showToast({ title: 'Notification not saved', detail: 'Please sign in again before changing notifications.' })
@@ -2821,6 +3104,38 @@ function NotificationsPage({
       setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true } : notification))
     } catch (error) {
       showToast({ title: 'Notification not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const openInquiryNotification = async (item: NotificationItem) => {
+    if (!isInquiryNotification(item) || !item.relatedEntityId) {
+      return
+    }
+
+    if (!item.isRead) {
+      void markRead(item)
+    }
+
+    const cached = data.publicInquiries.find((inquiry) => inquiry.id === item.relatedEntityId)
+    if (cached) {
+      setSelectedInquiry(cached)
+      return
+    }
+
+    if (!session?.token) {
+      showToast({ title: 'Inquiry not loaded', detail: 'Please sign in again to view inquiry details.' })
+      return
+    }
+
+    setLoadingInquiryId(item.relatedEntityId)
+    try {
+      const inquiry = await getJson<PublicBookingInquiry>(`/api/public-page/booking-inquiries/${item.relatedEntityId}`, session.token)
+      setPublicInquiries((current) => current.some((existing) => existing.id === inquiry.id) ? current : [inquiry, ...current])
+      setSelectedInquiry(inquiry)
+    } catch (error) {
+      showToast({ title: 'Inquiry not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setLoadingInquiryId(null)
     }
   }
 
@@ -2850,14 +3165,39 @@ function NotificationsPage({
         </thead>
         <tbody>
           {filtered.map((item) => (
-            <tr key={item.id}>
+            <tr
+              className={isInquiryNotification(item) ? 'clickable-row' : undefined}
+              key={item.id}
+              onClick={isInquiryNotification(item) ? () => void openInquiryNotification(item) : undefined}
+            >
               <td>{item.title}<small>{item.message}</small></td>
               <td>{item.type}</td>
               <td>{dateText(item.createdAt)}</td>
               <td>{item.isRead ? <Badge status="Clear" /> : <span className="unread-pill">New</span>}</td>
               <td className="table-actions">
-                {!item.isRead && (
-                  <button className="icon-button" type="button" title="Mark read" onClick={() => markRead(item)}>
+                {isInquiryNotification(item) ? (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title="Open inquiry"
+                    disabled={loadingInquiryId === item.relatedEntityId}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void openInquiryNotification(item)
+                    }}
+                  >
+                    <MailCheck size={16} />
+                  </button>
+                ) : !item.isRead && (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title="Mark read"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void markRead(item)
+                    }}
+                  >
                     <CheckCircle2 size={16} />
                   </button>
                 )}
@@ -2866,6 +3206,30 @@ function NotificationsPage({
           ))}
         </tbody>
       </Table>
+      <Modal title="Booking inquiry details" open={Boolean(selectedInquiry)} onClose={() => setSelectedInquiry(null)}>
+        {selectedInquiry && (
+          <div className="inquiry-details">
+            <DetailGrid
+              items={[
+                ['Vehicle', inquiryVehicleLabel(data, selectedInquiry)],
+                ['Customer', selectedInquiry.renterName],
+                ['Contact number', selectedInquiry.contactNumber],
+                ['Email', selectedInquiry.email || 'N/A'],
+                ['Start', dateTimeText(selectedInquiry.startDateTime)],
+                ['End', dateTimeText(selectedInquiry.endDateTime)],
+                ['Status', selectedInquiry.status],
+                ['Submitted', dateTimeText(selectedInquiry.createdAt)],
+                ['Message', selectedInquiry.message || 'No message provided'],
+              ]}
+            />
+            {selectedInquiry.vehicleId && (
+              <div className="inquiry-detail-actions">
+                <Link className="secondary-button" to={`/vehicles/${selectedInquiry.vehicleId}`}>Open vehicle</Link>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </Page>
   )
 }
@@ -2874,6 +3238,8 @@ function ReportsPage({ data }: { data: AppData }) {
   const gross = sum(data.trips.map((trip) => trip.grossRevenue))
   const net = sum(data.trips.map((trip) => netProfit(trip)))
   const maxVehicleRevenue = Math.max(...data.vehicles.map((vehicle) => vehicleRevenue(data, vehicle.id)), 1)
+  const inquiryCounts = inquiryCountsByVehicle(data)
+  const maxInquiryCount = Math.max(...inquiryCounts.map((item) => item.count), 1)
   return (
     <Page>
       <PageHeader eyebrow="Financials" title="Reports" />
@@ -2882,6 +3248,7 @@ function ReportsPage({ data }: { data: AppData }) {
         <MetricCard icon={WalletCards} label="Net profit" value={money.format(net)} tone="blue" />
         <MetricCard icon={Fuel} label="Fuel expenses" value={money.format(sum(data.trips.map((trip) => trip.fuelExpense)))} tone="red" />
         <MetricCard icon={Wrench} label="Maintenance estimate" value={money.format(sum(data.maintenance.map((item) => item.estimatedCost)))} tone="gold" />
+        <MetricCard icon={MailCheck} label="Booking inquiries" value={data.publicInquiries.length.toString()} tone="gold" />
       </section>
       <TwoColumn>
         <Panel title="Revenue per vehicle">
@@ -2906,8 +3273,175 @@ function ReportsPage({ data }: { data: AppData }) {
             <Expense label="Driver proceeds" value={sum(data.trips.map((trip) => trip.driverProceedCommission))} />
           </div>
         </Panel>
+        <Panel title="Inquiries by vehicle">
+          {inquiryCounts.length > 0 ? (
+            <div className="bar-list">
+              {inquiryCounts.map((item) => (
+                <div className="bar-row" key={item.key}>
+                  <span>{item.label}</span>
+                  <div><i style={{ width: `${(item.count / maxInquiryCount) * 100}%` }} /></div>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No inquiry data" detail="Public booking inquiries will be counted after visitors submit the form." />
+          )}
+        </Panel>
       </TwoColumn>
     </Page>
+  )
+}
+
+function SupportPage({ session, userProfile, showToast }: { session: AuthSession | null; userProfile: UserProfile; showToast: (toast: Toast) => void }) {
+  const [tickets, setTickets] = useState<SupportTicket[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!session?.token || session.role === 'SuperAdmin') {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<SupportTicket[]>('/api/support/tickets', session.token)
+      .then((items) => {
+        if (active) {
+          setTickets(items)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setTickets([])
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.role])
+
+  if (!session || session.role === 'SuperAdmin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const submitTicket = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    try {
+      const saved = await postJson<SupportTicket>('/api/support/tickets', {
+        subject: formString(form, 'subject').trim(),
+        message: formString(form, 'message').trim(),
+      }, session.token)
+      setTickets((current) => [saved, ...current])
+      formElement.reset()
+      showToast({ title: 'Support ticket sent', detail: 'BeezFleet support and your email both received the ticket details.' })
+    } catch (error) {
+      showToast({ title: 'Support ticket not sent', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Tenant help" title="Support & legal" />
+      <section className="support-layout">
+        <Panel title="Contact support">
+          <form className="modal-form" onSubmit={submitTicket}>
+            <p className="muted-line">Signed in as {userProfile.fullName || session.fullName} - {userProfile.email || session.email}</p>
+            <Field label="Subject" name="subject" defaultValue="Help with my BeezFleet workspace" required />
+            <label className="field full"><span>Message</span><textarea name="message" placeholder="Tell us what happened, which page you were on, and what you expected." required /></label>
+            <button className="primary-button full" type="submit" disabled={submitting}><MailCheck size={18} /> {submitting ? 'Sending...' : 'Send support ticket'}</button>
+          </form>
+        </Panel>
+        <Panel title="Legal links">
+          <div className="legal-link-grid">
+            <Link to="/privacy"><strong>Privacy Policy</strong><small>How BeezFleet handles tenant, user, fleet, rental, and support data.</small></Link>
+            <Link to="/terms"><strong>Terms of Service</strong><small>Rules for using BeezFleet as a fleet-management SaaS workspace.</small></Link>
+            <Link to="/support"><strong>Contact support</strong><small>Create a ticket that is emailed to the platform superadmin and copied to you.</small></Link>
+          </div>
+        </Panel>
+      </section>
+      <Panel title="Recent support tickets">
+        <CompactList>
+          {tickets.map((ticket) => (
+            <li key={ticket.id}>
+              <span>
+                <strong>{ticket.subject}</strong>
+                <small>{dateTimeText(ticket.createdAt)} - {ticket.requesterEmail}</small>
+                <small>{ticket.message}</small>
+              </span>
+              <Badge status={ticket.status} />
+            </li>
+          ))}
+        </CompactList>
+        {loading && <EmptyState title="Loading tickets" detail="Checking support history for this tenant." />}
+        {!loading && tickets.length === 0 && <EmptyState title="No tickets yet" detail="New support requests will appear here after submission." />}
+      </Panel>
+    </Page>
+  )
+}
+
+function PrivacyPolicyPage() {
+  return (
+    <LegalPage title="Privacy Policy" eyebrow="BeezFleet">
+      <p>BeezFleet is a fleet management platform for vehicle rental and fleet service operations. This policy explains how BeezFleet handles information that tenant owners, managers, drivers, and customers place in the workspace.</p>
+      <h2>Information We Process</h2>
+      <p>Tenant workspaces may include company profile details, user accounts, vehicle records, driver and renter information, booking and trip records, maintenance schedules, uploaded documents, photos, public page listings, public booking inquiries, notifications, and support tickets.</p>
+      <h2>How We Use Information</h2>
+      <p>We use workspace data to operate the service, authenticate users, provide tenant-specific fleet tools, generate notifications, process public booking inquiries, respond to support requests, protect the platform, and improve BeezFleet reliability.</p>
+      <h2>Tenant Responsibility</h2>
+      <p>Tenants are responsible for making sure they have permission to upload renter, driver, employee, vehicle, document, and photo data into BeezFleet. Tenants should avoid uploading unnecessary sensitive information.</p>
+      <h2>Email and Support</h2>
+      <p>BeezFleet may send transactional emails such as account verification, password reset, support ticket confirmation, and operational notices. Demo or seeded data should not trigger real reminder emails.</p>
+      <h2>Security and Access</h2>
+      <p>BeezFleet uses tenant-scoped access controls so each tenant workspace is separated from other tenants. Super administrators may access tenant details and support tickets when needed for platform operations, troubleshooting, billing, or security.</p>
+      <h2>Contact</h2>
+      <p>For privacy questions, tenant users can submit a support ticket from the Support page after signing in.</p>
+      <div className="legal-actions"><Link className="secondary-button" to="/terms">Terms of Service</Link><Link className="secondary-button" to="/login">Back to login</Link></div>
+    </LegalPage>
+  )
+}
+
+function TermsOfServicePage() {
+  return (
+    <LegalPage title="Terms of Service" eyebrow="BeezFleet">
+      <p>These terms govern access to and use of BeezFleet, a SaaS platform for managing fleet, rental, maintenance, document, public listing, and inquiry workflows.</p>
+      <h2>Tenant Accounts</h2>
+      <p>Each tenant is responsible for account users, workspace configuration, uploaded records, public page listings, and the accuracy of operational data entered into BeezFleet.</p>
+      <h2>Acceptable Use</h2>
+      <p>Users may not use BeezFleet to upload unlawful content, violate privacy rights, impersonate others, interfere with platform security, or send abusive support requests. Public pages should only display vehicles and information the tenant is authorized to publish.</p>
+      <h2>Operational Data</h2>
+      <p>BeezFleet helps organize records, reminders, and insights, but tenants remain responsible for business decisions, regulatory compliance, vehicle safety, insurance, permits, contracts, and renter or driver verification.</p>
+      <h2>Availability and Maintenance</h2>
+      <p>We may perform system maintenance to improve reliability and security. Active maintenance announcements may be shown on the login page with the expected date and time window.</p>
+      <h2>Support</h2>
+      <p>Tenant users can submit support tickets through the Support page. A copy of the ticket details is emailed to the tenant requester for reference.</p>
+      <h2>Changes</h2>
+      <p>BeezFleet may update these terms as the service evolves. Continued use after updates means the tenant accepts the current terms.</p>
+      <div className="legal-actions"><Link className="secondary-button" to="/privacy">Privacy Policy</Link><Link className="secondary-button" to="/login">Back to login</Link></div>
+    </LegalPage>
+  )
+}
+
+function LegalPage({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
+  return (
+    <main className="legal-shell">
+      <section className="legal-panel">
+        <Link className="brand legal-brand" to="/login"><span className="brand-mark">BF</span><span><strong>BeezFleet</strong><small>{eyebrow}</small></span></Link>
+        <h1>{title}</h1>
+        <div className="legal-copy">{children}</div>
+      </section>
+    </main>
   )
 }
 
@@ -3117,6 +3651,25 @@ function SettingsPage({
 function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: AuthResponse) => void; showToast: (toast: Toast) => void }) {
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
+  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  useEffect(() => {
+    let active = true
+    getJson<SystemAnnouncement[]>('/api/announcements/active')
+      .then((items) => {
+        if (active) {
+          setAnnouncements(items)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAnnouncements([])
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitting(true)
@@ -3150,12 +3703,22 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
   }
   return (
     <AuthShell title="Login" subtitle="BeezFleet">
+      {announcements.map((announcement) => (
+        <div className="announcement-banner" key={announcement.id}>
+          <Megaphone size={18} />
+          <span>
+            <strong>{announcement.title}</strong>
+            <small>{announcement.message} {dateTimeText(announcement.startsAt)} - {dateTimeText(announcement.endsAt)}</small>
+          </span>
+        </div>
+      ))}
       <form className="auth-form" onSubmit={submit}>
         <Field label="Email" name="email" type="email" required />
         <Field label="Password" name="password" type="password" required />
         <button className="primary-button full" type="submit" disabled={submitting}><ShieldCheck size={18} /> {submitting ? 'Logging in...' : 'Login'}</button>
         <Link to="/forgot-password">Forgot password?</Link>
         <Link to="/register">Create an account</Link>
+        <div className="auth-links"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></div>
       </form>
     </AuthShell>
   )
@@ -4106,6 +4669,22 @@ function vehicleRevenue(data: AppData, vehicleId: string) {
   return sum(data.trips.filter((trip) => trip.vehicleId === vehicleId).map((trip) => trip.grossRevenue))
 }
 
+function inquiryCountsByVehicle(data: AppData) {
+  const counts = new Map<string, { key: string; label: string; count: number }>()
+  for (const inquiry of data.publicInquiries) {
+    const key = inquiry.vehicleId || inquiry.vehicleLabel || 'unassigned'
+    const label = inquiryVehicleLabel(data, inquiry)
+    const current = counts.get(key)
+    counts.set(key, { key, label, count: (current?.count ?? 0) + 1 })
+  }
+
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+}
+
+function inquiryVehicleLabel(data: AppData, inquiry: PublicBookingInquiry) {
+  return inquiry.vehicleLabel || vehicleLabel(data, inquiry.vehicleId || undefined)
+}
+
 function vehicleLabel(data: AppData, id?: string) {
   const vehicle = data.vehicles.find((item) => item.id === id)
   return vehicle ? `${vehicle.plateNumber} - ${vehicle.make} ${vehicle.model}` : 'Unassigned'
@@ -4134,8 +4713,17 @@ function dateText(value?: string) {
   return new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function dateTimeText(value?: string) {
+  if (!value) return 'N/A'
+  return new Date(value).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 function statusLabel(status: string) {
   return status.replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
+function platformVehicleStatusLabel(status: AdminTenantVehicle['status']) {
+  return status === 'UnderMaintenance' ? 'Under Maintenance' : status
 }
 
 function daysUntil(value?: string) {
@@ -4325,6 +4913,8 @@ function notificationFromApi(notification: NotificationApiDto): NotificationItem
     type: fromApiNotificationType(notification.type),
     isRead: notification.isRead,
     createdAt: notification.createdAt,
+    relatedEntityType: notification.relatedEntityType,
+    relatedEntityId: notification.relatedEntityId,
   }
 }
 

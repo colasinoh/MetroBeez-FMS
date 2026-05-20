@@ -11,6 +11,12 @@ namespace MetroBeezFMS.Infrastructure.Services;
 
 public sealed class ReminderBackgroundService : BackgroundService
 {
+    private static readonly Guid[] SeedVehicleIds =
+    [
+        Guid.Parse("11111111-1111-4111-8111-111111111111"),
+        Guid.Parse("22222222-2222-4222-8222-222222222222")
+    ];
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ReminderBackgroundService> _logger;
@@ -132,7 +138,7 @@ public sealed class ReminderBackgroundService : BackgroundService
                         RelatedEntityType = nameof(MaintenanceSchedule),
                         RelatedEntityId = pms.Id
                     });
-                    if (!string.IsNullOrWhiteSpace(ownerEmail))
+                    if (!string.IsNullOrWhiteSpace(ownerEmail) && !IsSeededDemoReminder(pms))
                     {
                         await email.SendAsync(ownerEmail, "BeezFleet - PMS Reminder", $"<p>{pms.Title} is due soon for {pms.Vehicle?.PlateNumber}.</p>", cancellationToken);
                     }
@@ -141,5 +147,11 @@ public sealed class ReminderBackgroundService : BackgroundService
 
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static bool IsSeededDemoReminder(MaintenanceSchedule schedule)
+    {
+        return string.Equals(schedule.CreatedBy, "TenantSeeder", StringComparison.OrdinalIgnoreCase)
+            || SeedVehicleIds.Contains(schedule.VehicleId);
     }
 }

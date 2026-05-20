@@ -284,8 +284,15 @@ public static class TenantSeeder
         {
             CompanyName = companyName,
             BusinessAddress = "Metro Manila, Philippines",
-            ContactNumber = "+63 2 8555 0100"
+            ContactNumber = "+63 2 8555 0100",
+            CreatedBy = "TenantSeeder"
         });
+
+        foreach (var seededEntity in new AuditableEntity[] { vehicleA, vehicleB, driverA, driverB, renterA, renterB, renterC, bookingA, bookingB, bookingC, tripA, tripB, tripC, pmsA, pmsB })
+        {
+            seededEntity.CreatedBy = "TenantSeeder";
+        }
+
         dbContext.AddRange(vehicleA, vehicleB, driverA, driverB, renterA, renterB, renterC, bookingA, bookingB, bookingC, tripA, tripB, tripC, pmsA, pmsB);
         foreach (var feature in CleanPublicVehicleFeatures)
         {

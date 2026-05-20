@@ -13,6 +13,7 @@ public sealed class Tenant : AuditableEntity
     public Guid OwnerUserId { get; set; }
     public DateTimeOffset? EmailVerificationCompletedAt { get; set; }
     public ICollection<TenantUser> Users { get; set; } = new List<TenantUser>();
+    public ICollection<SupportTicket> SupportTickets { get; set; } = new List<SupportTicket>();
 }
 
 public sealed class TenantUser : AuditableEntity
@@ -22,6 +23,27 @@ public sealed class TenantUser : AuditableEntity
     public string Role { get; set; } = Roles.OwnerAdmin;
     public bool IsActive { get; set; } = true;
     public Tenant? Tenant { get; set; }
+}
+
+public sealed class SupportTicket : AuditableEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid RequesterUserId { get; set; }
+    public string? RequesterName { get; set; }
+    public required string RequesterEmail { get; set; }
+    public required string Subject { get; set; }
+    public required string Message { get; set; }
+    public string Status { get; set; } = "Open";
+    public Tenant? Tenant { get; set; }
+}
+
+public sealed class SystemAnnouncement : AuditableEntity
+{
+    public required string Title { get; set; }
+    public required string Message { get; set; }
+    public DateTimeOffset StartsAt { get; set; }
+    public DateTimeOffset EndsAt { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 public sealed class CompanyProfile : SoftDeletableEntity
