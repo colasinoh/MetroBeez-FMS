@@ -5,6 +5,7 @@ using MetroBeezFMS.Infrastructure.Identity;
 using MetroBeezFMS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace MetroBeezFMS.Infrastructure.Services;
@@ -12,18 +13,27 @@ namespace MetroBeezFMS.Infrastructure.Services;
 public sealed class TenantAdministrationService : ITenantAdministrationService
 {
     private static readonly Regex SafeNameRegex = new("^[a-z0-9_]+$", RegexOptions.Compiled);
+    private static readonly Guid[] SeedVehicleIds =
+    [
+        Guid.Parse("11111111-1111-4111-8111-111111111111"),
+        Guid.Parse("22222222-2222-4222-8222-222222222222")
+    ];
+
     private readonly CentralDbContext _centralDbContext;
     private readonly IConfiguration _configuration;
     private readonly IFileStorageService _fileStorageService;
+    private readonly ILogger<TenantAdministrationService> _logger;
 
     public TenantAdministrationService(
         CentralDbContext centralDbContext,
         IConfiguration configuration,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        ILogger<TenantAdministrationService> logger)
     {
         _centralDbContext = centralDbContext;
         _configuration = configuration;
         _fileStorageService = fileStorageService;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<AdminTenantDto>> ListTenantsAsync(CancellationToken cancellationToken = default)
@@ -41,6 +51,42 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 
         return tenants.Select(tenant => ToDto(tenant, owners.GetValueOrDefault(tenant.OwnerUserId))).ToList();
+    }
+
+    public async Task<IReadOnlyList<AdminRegisteredVehicleDto>> ListRegisteredVehiclesAsync(CancellationToken cancellationToken = default)
+    {
+        var tenants = await _centralDbContext.Tenants
+            .AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var ownerIds = tenants.Select(x => x.OwnerUserId).Distinct().ToArray();
+        var owners = await _centralDbContext.Users
+            .AsNoTracking()
+            .Where(x => ownerIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var registeredVehicles = new List<AdminRegisteredVehicleDto>();
+        foreach (var tenant in tenants)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var owner = owners.GetValueOrDefault(tenant.OwnerUserId);
+
+            try
+            {
+                registeredVehicles.AddRange(await ListTenantRegisteredVehiclesAsync(tenant, owner, cancellationToken));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Could not read registered vehicles for tenant {TenantId} ({DatabaseName}).", tenant.Id, tenant.DatabaseName);
+            }
+        }
+
+        return registeredVehicles
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.TenantName)
+            .ThenBy(x => x.PlateNumber)
+            .ToList();
     }
 
     public async Task<AdminTenantDetailDto> GetTenantDetailAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -213,6 +259,7 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
         await using var db = new TenantDbContext(options);
         return await db.Vehicles
             .AsNoTracking()
+            .Where(x => (x.CreatedBy == null || x.CreatedBy != "TenantSeeder") && !SeedVehicleIds.Contains(x.Id))
             .OrderBy(x => x.PlateNumber)
             .Select(x => new AdminTenantVehicleDto(
                 x.Id,
@@ -224,6 +271,37 @@ public sealed class TenantAdministrationService : ITenantAdministrationService
                 x.FuelType,
                 x.PassengerCapacity,
                 x.Status))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<AdminRegisteredVehicleDto>> ListTenantRegisteredVehiclesAsync(Tenant tenant, AppUser? owner, CancellationToken cancellationToken)
+    {
+        var options = new DbContextOptionsBuilder<TenantDbContext>()
+            .UseNpgsql(DatabaseConnectionFactory.BuildTenantConnectionString(_configuration, tenant.DatabaseName))
+            .Options;
+
+        await using var db = new TenantDbContext(options);
+        return await db.Vehicles
+            .AsNoTracking()
+            .Where(x => (x.CreatedBy == null || x.CreatedBy != "TenantSeeder") && !SeedVehicleIds.Contains(x.Id))
+            .OrderBy(x => x.PlateNumber)
+            .Select(x => new AdminRegisteredVehicleDto(
+                tenant.Id,
+                tenant.Name,
+                tenant.Slug,
+                owner == null ? null : owner.Email,
+                owner == null ? null : owner.FullName,
+                x.Id,
+                x.PlateNumber,
+                x.Make,
+                x.Model,
+                x.YearModel,
+                x.VehicleType,
+                x.FuelType,
+                x.PassengerCapacity,
+                x.Status,
+                x.CreatedAt,
+                x.UpdatedAt))
             .ToListAsync(cancellationToken);
     }
 

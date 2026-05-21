@@ -86,6 +86,7 @@ public interface ITenantDatabaseProvisioner
 public interface ITenantAdministrationService
 {
     Task<IReadOnlyList<AdminTenantDto>> ListTenantsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AdminRegisteredVehicleDto>> ListRegisteredVehiclesAsync(CancellationToken cancellationToken = default);
     Task<AdminTenantDetailDto> GetTenantDetailAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<AdminTenantDto> UpdateStatusAsync(Guid tenantId, TenantStatus status, CancellationToken cancellationToken = default);
     Task DeleteTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);

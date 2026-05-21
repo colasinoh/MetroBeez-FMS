@@ -141,10 +141,12 @@ public sealed class SupportController : ControllerBase
     private static string BuildSuperAdminEmail(SupportTicketDto ticket)
     {
         return $"""
-            <p>A tenant submitted a BeezFleet support ticket.</p>
+            <p>A tenant submitted a new BeezFleet support ticket. Review the workspace context and respond through your support process.</p>
+            <p><strong>Ticket ID:</strong> {ticket.Id}</p>
             <p><strong>Tenant:</strong> {Html(ticket.TenantName)}</p>
             <p><strong>Requester:</strong> {Html(ticket.RequesterName ?? ticket.RequesterEmail)} ({Html(ticket.RequesterEmail)})</p>
             <p><strong>Subject:</strong> {Html(ticket.Subject)}</p>
+            <p><strong>Status:</strong> {Html(ticket.Status)}</p>
             <p><strong>Message:</strong></p>
             <p>{Html(ticket.Message).Replace("\n", "<br>")}</p>
             """;
@@ -153,7 +155,9 @@ public sealed class SupportController : ControllerBase
     private static string BuildTenantEmail(SupportTicketDto ticket)
     {
         return $"""
-            <p>We received your BeezFleet support ticket.</p>
+            <p>We received your BeezFleet support ticket and sent it to the platform administrator.</p>
+            <p>Keep this email as your confirmation while the team reviews your request.</p>
+            <p><strong>Ticket ID:</strong> {ticket.Id}</p>
             <p><strong>Ticket:</strong> {Html(ticket.Subject)}</p>
             <p><strong>Status:</strong> {Html(ticket.Status)}</p>
             <p><strong>Submitted:</strong> {ticket.CreatedAt:yyyy-MM-dd HH:mm} UTC</p>

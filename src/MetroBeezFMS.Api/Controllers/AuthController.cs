@@ -171,9 +171,10 @@ public sealed class AuthController : ControllerBase
                 user.Email!,
                 "BeezFleet - Password Reset",
                 $"""
-                <p>We received a request to reset your BeezFleet password.</p>
+                <p>We received a request to reset the password for your BeezFleet account.</p>
+                <p>Use the secure link below to choose a new password and return to your workspace.</p>
                 <p><a href="{resetUrl}">Reset password</a></p>
-                <p>If you did not request this, you can ignore this message.</p>
+                <p>If you did not request this reset, you can ignore this email. Your current password will remain unchanged.</p>
                 """,
                 cancellationToken);
         }
@@ -299,7 +300,7 @@ public sealed class AuthController : ControllerBase
             "BeezFleet - Verify Your Email",
             $"""
             <p>Welcome to BeezFleet, {user.FullName}.</p>
-            <p>Verify your email before we create your tenant database.</p>
+            <p>Verify your email so we can prepare your secure tenant workspace and connect your fleet records, bookings, documents, and reports under your company account.</p>
             <p><a href="{verifyUrl}">Verify email</a></p>
             <p>If the button does not work, copy and paste this link into your browser:</p>
             <p>{verifyUrl}</p>

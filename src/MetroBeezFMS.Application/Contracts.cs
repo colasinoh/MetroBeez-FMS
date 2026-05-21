@@ -35,6 +35,24 @@ public sealed record AdminTenantVehicleDto(
     int PassengerCapacity,
     VehicleStatus Status);
 
+public sealed record AdminRegisteredVehicleDto(
+    Guid TenantId,
+    string TenantName,
+    string TenantSlug,
+    string? OwnerEmail,
+    string? OwnerName,
+    Guid Id,
+    string PlateNumber,
+    string Make,
+    string Model,
+    int YearModel,
+    string? VehicleType,
+    string? FuelType,
+    int PassengerCapacity,
+    VehicleStatus Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt);
+
 public sealed record AdminTenantDetailDto(
     AdminTenantDto Tenant,
     IEnumerable<AdminTenantVehicleDto> Vehicles,

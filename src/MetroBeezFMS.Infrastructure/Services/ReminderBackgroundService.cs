@@ -140,7 +140,7 @@ public sealed class ReminderBackgroundService : BackgroundService
                     });
                     if (!string.IsNullOrWhiteSpace(ownerEmail) && !IsSeededDemoReminder(pms))
                     {
-                        await email.SendAsync(ownerEmail, "BeezFleet - PMS Reminder", $"<p>{pms.Title} is due soon for {pms.Vehicle?.PlateNumber}.</p>", cancellationToken);
+                        await email.SendAsync(ownerEmail, "BeezFleet - PMS Reminder", BuildPmsReminderEmail(pms), cancellationToken);
                     }
                 }
             }
@@ -149,9 +149,36 @@ public sealed class ReminderBackgroundService : BackgroundService
         }
     }
 
+    private static string BuildPmsReminderEmail(MaintenanceSchedule schedule)
+    {
+        var vehicle = schedule.Vehicle;
+        var dueDate = schedule.DueDate?.ToString("yyyy-MM-dd") ?? "No due date set";
+        var dueOdometer = schedule.DueOdometer.HasValue ? $"{schedule.DueOdometer:N0} km" : "No odometer target set";
+        var currentOdometer = vehicle is null ? "Not available" : $"{vehicle.CurrentOdometer:N0} km";
+        var vehicleLabel = vehicle is null
+            ? "Vehicle"
+            : $"{vehicle.PlateNumber} - {vehicle.YearModel} {vehicle.Make} {vehicle.Model}";
+
+        return $"""
+            <p><strong>{Html(schedule.Title)}</strong> is due soon for <strong>{Html(vehicleLabel)}</strong>.</p>
+            <p>Use this reminder to plan shop scheduling, parts availability, and renter handoffs before the unit becomes overdue.</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;">
+              <tr><td style="padding:8px 0;color:#64748b;">Due date</td><td style="padding:8px 0;text-align:right;font-weight:700;">{Html(dueDate)}</td></tr>
+              <tr><td style="padding:8px 0;color:#64748b;">Due odometer</td><td style="padding:8px 0;text-align:right;font-weight:700;">{Html(dueOdometer)}</td></tr>
+              <tr><td style="padding:8px 0;color:#64748b;">Current odometer</td><td style="padding:8px 0;text-align:right;font-weight:700;">{Html(currentOdometer)}</td></tr>
+              <tr><td style="padding:8px 0;color:#64748b;">Vendor/shop</td><td style="padding:8px 0;text-align:right;font-weight:700;">{Html(schedule.VendorShop ?? "Not assigned")}</td></tr>
+            </table>
+            """;
+    }
+
     private static bool IsSeededDemoReminder(MaintenanceSchedule schedule)
     {
         return string.Equals(schedule.CreatedBy, "TenantSeeder", StringComparison.OrdinalIgnoreCase)
             || SeedVehicleIds.Contains(schedule.VehicleId);
+    }
+
+    private static string Html(string value)
+    {
+        return System.Net.WebUtility.HtmlEncode(value);
     }
 }

@@ -111,6 +111,7 @@ const tenantNavItems = [
 
 const platformNavItems = [
   { to: '/admin/tenants', label: 'Tenants', icon: ShieldCheck },
+  { to: '/admin/vehicles', label: 'Vehicles', icon: Car },
   { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
 ]
 
@@ -194,6 +195,16 @@ type AdminTenantVehicle = {
   fuelType?: string | null
   passengerCapacity: number
   status: 'Available' | 'Booked' | 'UnderMaintenance' | 'Inactive'
+}
+
+type AdminRegisteredVehicle = AdminTenantVehicle & {
+  tenantId: string
+  tenantName: string
+  tenantSlug: string
+  ownerEmail?: string | null
+  ownerName?: string | null
+  createdAt: string
+  updatedAt?: string | null
 }
 
 type SupportTicket = {
@@ -894,6 +905,7 @@ function App() {
           <Route index element={<Navigate to={session?.role === 'SuperAdmin' ? '/admin/tenants' : '/dashboard'} replace />} />
           <Route path="/admin/tenants" element={<PlatformTenantsPage session={session} showToast={showToast} />} />
           <Route path="/admin/tenants/:id" element={<PlatformTenantDetailsPage session={session} showToast={showToast} />} />
+          <Route path="/admin/vehicles" element={<PlatformVehiclesPage session={session} showToast={showToast} />} />
           <Route path="/admin/announcements" element={<PlatformAnnouncementsPage session={session} showToast={showToast} />} />
           <Route path="/dashboard" element={session?.role === 'SuperAdmin' ? <Navigate to="/admin/tenants" replace /> : <DashboardPage data={data} />} />
           <Route
@@ -1264,6 +1276,131 @@ function PlatformTenantsPage({ session, showToast }: { session: AuthSession | nu
         onCancel={() => setDeleteTarget(null)}
         onConfirm={deleteTenant}
       />
+    </Page>
+  )
+}
+
+function PlatformVehiclesPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
+  const [vehicles, setVehicles] = useState<AdminRegisteredVehicle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<'All' | AdminTenantVehicle['status']>('All')
+
+  useEffect(() => {
+    if (!session?.token || session.role !== 'SuperAdmin') {
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    getJson<AdminRegisteredVehicle[]>('/api/admin/vehicles', session.token)
+      .then((items) => {
+        if (active) {
+          setVehicles(items)
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showToast({ title: 'Vehicles not loaded', detail: error instanceof Error ? error.message : 'Please try again.' })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.token, session?.role])
+
+  if (!session || session.role !== 'SuperAdmin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const filteredVehicles = vehicles
+    .filter((vehicle) => status === 'All' || vehicle.status === status)
+    .filter((vehicle) =>
+      [
+        vehicle.tenantName,
+        vehicle.tenantSlug,
+        vehicle.ownerName,
+        vehicle.ownerEmail,
+        vehicle.plateNumber,
+        vehicle.make,
+        vehicle.model,
+        vehicle.vehicleType,
+        vehicle.fuelType,
+        vehicle.status,
+      ].join(' ').toLowerCase().includes(query.toLowerCase()),
+    )
+
+  const tenantCount = new Set(vehicles.map((vehicle) => vehicle.tenantId)).size
+  const availableCount = vehicles.filter((vehicle) => vehicle.status === 'Available').length
+  const bookedCount = vehicles.filter((vehicle) => vehicle.status === 'Booked').length
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Platform" title="Registered vehicles" />
+      <section className="metric-grid reports">
+        <MetricCard icon={Car} label="Registered vehicles" value={vehicles.length.toString()} tone="blue" />
+        <MetricCard icon={Building2} label="Tenant workspaces" value={tenantCount.toString()} tone="green" />
+        <MetricCard icon={CheckCircle2} label="Available" value={availableCount.toString()} tone="green" />
+        <MetricCard icon={CalendarDays} label="Booked" value={bookedCount.toString()} tone="gold" />
+      </section>
+      <Toolbar query={query} setQuery={setQuery} placeholder="Search vehicle, tenant, owner, plate, type">
+        <label className="select-filter">
+          <Filter size={16} />
+          <select value={status} onChange={(event) => setStatus(event.target.value as 'All' | AdminTenantVehicle['status'])}>
+            <option value="All">All statuses</option>
+            <option value="Available">Available</option>
+            <option value="Booked">Booked</option>
+            <option value="UnderMaintenance">Under maintenance</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </label>
+      </Toolbar>
+      <Panel title="Tenant vehicle registry">
+        <Table>
+          <thead>
+            <tr>
+              <th>Vehicle</th>
+              <th>Tenant</th>
+              <th>Owner</th>
+              <th>Specs</th>
+              <th>Status</th>
+              <th>Registered</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredVehicles.map((vehicle) => (
+              <tr key={`${vehicle.tenantId}-${vehicle.id}`}>
+                <td>
+                  <strong>{vehicle.plateNumber}</strong>
+                  <small>{vehicle.yearModel} {vehicle.make} {vehicle.model}</small>
+                </td>
+                <td>
+                  <Link className="table-link" to={`/admin/tenants/${vehicle.tenantId}`}>{vehicle.tenantName}</Link>
+                  <small>{vehicle.tenantSlug}</small>
+                </td>
+                <td>
+                  {vehicle.ownerName || 'No owner name'}
+                  <small>{vehicle.ownerEmail || 'No owner email'}</small>
+                </td>
+                <td>
+                  {vehicle.vehicleType || 'Vehicle'}
+                  <small>{vehicle.fuelType || 'No fuel type'} - {vehicle.passengerCapacity || 0} seats</small>
+                </td>
+                <td><Badge status={platformVehicleStatusLabel(vehicle.status)} /></td>
+                <td>{dateText(vehicle.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        {loading && <EmptyState title="Loading registered vehicles" detail="Reading real vehicle records from tenant databases." />}
+        {!loading && filteredVehicles.length === 0 && <EmptyState title="No registered vehicles found" detail="Seed/demo vehicles are hidden from this registry. Real tenant vehicle records will appear here." />}
+      </Panel>
     </Page>
   )
 }
