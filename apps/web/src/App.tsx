@@ -883,6 +883,8 @@ function App() {
         <Route path="/reset-password" element={<ResetPasswordPage showToast={showToast} />} />
         <Route path="/register" element={<RegisterPage showToast={showToast} />} />
         <Route path="/verify-email" element={<VerifyEmailPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
+        <Route path="/" element={<LandingTestPage />} />
+        <Route path="/index" element={<LandingTestPage />} />
         <Route path="/landing-test" element={<LandingTestPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
@@ -903,7 +905,7 @@ function App() {
             />
           }
         >
-          <Route index element={<Navigate to={session?.role === 'SuperAdmin' ? '/admin/tenants' : '/dashboard'} replace />} />
+          <Route path="/app" element={<Navigate to={session?.role === 'SuperAdmin' ? '/admin/tenants' : '/dashboard'} replace />} />
           <Route path="/admin/tenants" element={<PlatformTenantsPage session={session} showToast={showToast} />} />
           <Route path="/admin/tenants/:id" element={<PlatformTenantDetailsPage session={session} showToast={showToast} />} />
           <Route path="/admin/vehicles" element={<PlatformVehiclesPage session={session} showToast={showToast} />} />
@@ -3671,7 +3673,7 @@ function LandingTestPage() {
     { title: 'Reports', text: 'See revenue, expenses, and the vehicles customers keep asking for.', Icon: BarChart3 },
   ]
   const insightCards = [
-    { label: 'Most inquired vehicle', value: '2019 Toyota HiAce', detail: '42% of public demand', icon: BarChart3 },
+    { label: 'Most inquired vehicle', value: '2026 Toyota Ativ', detail: '42% of public demand', icon: BarChart3 },
     { label: 'Booking conversion', value: '18 scheduled', detail: 'from renter inquiries this week', icon: CalendarDays },
     { label: 'Preventive maintenance', value: '6 reminders', detail: 'before downtime becomes expensive', icon: Bell },
   ]
@@ -3691,12 +3693,12 @@ function LandingTestPage() {
           <span className="landing-map-pin pin-three" />
         </div>
         <nav className="landing-nav" aria-label="Landing page navigation">
-          <Link className="landing-brand" to="/landing-test"><span>BF</span><strong>BeezFleet</strong></Link>
+          <Link className="landing-brand" to="/"><span>BF</span><strong>BeezFleet</strong></Link>
           <div>
             <a href="#benefits">Benefits</a>
             <a href="#operators">Operators</a>
             <a href="#preview">Preview</a>
-            <Link to="/login">Login</Link>
+            <Link className="landing-login-cta" to="/login">Login</Link>
           </div>
         </nav>
         <div className="landing-hero-grid">
@@ -3706,7 +3708,8 @@ function LandingTestPage() {
             <p>BeezFleet gives car rental owners, transport operators, and logistics teams a sharper way to manage vehicles, bookings, PMS, public inquiries, and the work behind every trip.</p>
             <div className="landing-actions">
               <Link className="landing-primary" to="/register">Start free <ChevronRight size={18} /></Link>
-              <a className="landing-secondary" href="#preview">Watch the flow</a>
+              <Link className="landing-secondary landing-login-action" to="/login">Login</Link>
+              <a className="landing-ghost" href="#preview">Watch the flow</a>
             </div>
             <div className="landing-hero-meta" aria-label="BeezFleet highlights">
               <span>No ads</span>
@@ -3724,7 +3727,7 @@ function LandingTestPage() {
             ))}
             <div className="landing-command-top">
               <span>Live workspace</span>
-              <strong>MetroBeez Mobility</strong>
+              <strong>BeezFleet Demo</strong>
             </div>
             <div className="landing-command-screen">
               <div className="landing-command-map">
@@ -3755,7 +3758,7 @@ function LandingTestPage() {
                 </div>
                 <div className="landing-demand-meter">
                   <span>Top inquiry demand</span>
-                  <strong>NAY 5618</strong>
+                  <strong>2026 Toyota Ativ</strong>
                   <i />
                 </div>
               </div>
@@ -3886,7 +3889,7 @@ function LandingTestPage() {
       <section className="landing-section landing-final-cta">
         <span>Ready when you are</span>
         <h2>Give your fleet the operating system it deserves.</h2>
-        <p>Use this test page to preview the direction. If it feels right, it can become the future public `/index` experience.</p>
+        <p>Start with a clean command center for vehicle records, booking inquiries, public listings, PMS reminders, and the operational visibility your team needs.</p>
         <div className="landing-actions">
           <Link className="landing-primary" to="/register">Create an account <ChevronRight size={18} /></Link>
           <Link className="landing-secondary" to="/login">Go to login</Link>
