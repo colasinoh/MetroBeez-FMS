@@ -3643,10 +3643,21 @@ function TermsOfServicePage() {
 
 function LandingTestPage() {
   const benefits = [
-    { icon: Car, title: 'Vehicle operations without spreadsheet sprawl', text: 'Track vehicles, documents, photos, status, availability, and public listing details in one clean workspace.' },
-    { icon: CalendarDays, title: 'Bookings that connect to the rest of the business', text: 'Turn inquiries into bookings, trips, renter records, driver assignments, and revenue visibility.' },
-    { icon: Wrench, title: 'PMS and compliance reminders before they become expensive', text: 'Stay ahead of preventive maintenance, expiring documents, and license dates with operational alerts.' },
-    { icon: Globe2, title: 'A renter-facing page ready for customers', text: 'Publish selected vehicles, prices, feature tags, gallery photos, and inquiry forms without building a separate website.' },
+    { icon: Car, title: 'Fleet records with executive clarity', text: 'Vehicle profiles, photos, OR/CR files, status, ownership, and operational details stay organized without the spreadsheet drag.' },
+    { icon: CalendarDays, title: 'Booking operations that stay connected', text: 'Inquiry, renter, booking, trip, driver, and revenue records move as one workflow instead of scattered chat threads.' },
+    { icon: Wrench, title: 'Maintenance timing you can actually see', text: 'PMS schedules, document expiries, and license reminders surface before they become downtime or compliance trouble.' },
+    { icon: Globe2, title: 'A public page that sells the fleet', text: 'Publish curated vehicle galleries, prices, feature tags, and inquiry forms with the polish customers expect.' },
+  ]
+  const commandStats = [
+    ['42', 'vehicles monitored'],
+    ['18', 'active bookings'],
+    ['87', 'public inquiries'],
+    ['6', 'PMS due soon'],
+  ]
+  const heroSignals = [
+    { label: 'Inquiry velocity', value: '+31%', icon: MessageSquare },
+    { label: 'Next PMS window', value: '2 days', icon: Wrench },
+    { label: 'Booked today', value: '18', icon: CalendarDays },
   ]
   const audiences = ['Car rental owners', 'Transport operators', 'Logistics fleets', 'Corporate shuttle teams', 'Family-owned rental fleets', 'Growing mobility brands']
   const workflow = [
@@ -3654,10 +3665,31 @@ function LandingTestPage() {
     ['02', 'Operate', 'Manage bookings, dispatch trips, monitor PMS, and track expenses.'],
     ['03', 'Grow', 'Publish vehicles publicly and understand which units bring demand.'],
   ]
+  const showcase = [
+    { title: 'Bookings', text: 'From inquiry to scheduled trip without losing context.', Icon: CalendarDays },
+    { title: 'PMS', text: 'Maintenance windows, odometer triggers, and reminders in one view.', Icon: Wrench },
+    { title: 'Reports', text: 'See revenue, expenses, and the vehicles customers keep asking for.', Icon: BarChart3 },
+  ]
+  const insightCards = [
+    { label: 'Most inquired vehicle', value: '2019 Toyota HiAce', detail: '42% of public demand', icon: BarChart3 },
+    { label: 'Booking conversion', value: '18 scheduled', detail: 'from renter inquiries this week', icon: CalendarDays },
+    { label: 'Preventive maintenance', value: '6 reminders', detail: 'before downtime becomes expensive', icon: Bell },
+  ]
 
   return (
     <main className="landing-page">
       <section className="landing-hero">
+        <div className="landing-motion-field" aria-hidden="true">
+          <span className="landing-route-line route-one" />
+          <span className="landing-route-line route-two" />
+          <span className="landing-route-line route-three" />
+          <span className="landing-trail trail-one" />
+          <span className="landing-trail trail-two" />
+          <span className="landing-trail trail-three" />
+          <span className="landing-map-pin pin-one" />
+          <span className="landing-map-pin pin-two" />
+          <span className="landing-map-pin pin-three" />
+        </div>
         <nav className="landing-nav" aria-label="Landing page navigation">
           <Link className="landing-brand" to="/landing-test"><span>BF</span><strong>BeezFleet</strong></Link>
           <div>
@@ -3667,29 +3699,134 @@ function LandingTestPage() {
             <Link to="/login">Login</Link>
           </div>
         </nav>
-        <div className="landing-hero-content">
-          <span className="landing-kicker">Fleet command center for rental operators</span>
-          <h1>BeezFleet</h1>
-          <p>Modern fleet and car rental management for owners who need bookings, vehicles, drivers, renters, PMS, documents, and public inquiries to move together.</p>
-          <div className="landing-actions">
-            <Link className="landing-primary" to="/register">Start free <ChevronRight size={18} /></Link>
-            <a className="landing-secondary" href="#preview">See the platform</a>
+        <div className="landing-hero-grid">
+          <div className="landing-hero-content">
+            <span className="landing-kicker">Fleet command center for ambitious operators</span>
+            <h1>Run the fleet like a premium mobility brand.</h1>
+            <p>BeezFleet gives car rental owners, transport operators, and logistics teams a sharper way to manage vehicles, bookings, PMS, public inquiries, and the work behind every trip.</p>
+            <div className="landing-actions">
+              <Link className="landing-primary" to="/register">Start free <ChevronRight size={18} /></Link>
+              <a className="landing-secondary" href="#preview">Watch the flow</a>
+            </div>
+            <div className="landing-hero-meta" aria-label="BeezFleet highlights">
+              <span>No ads</span>
+              <span>Built for Philippine rental fleets</span>
+              <span>Public page included</span>
+            </div>
+          </div>
+          <div className="landing-command-stage" id="preview" aria-label="BeezFleet product preview">
+            {heroSignals.map((signal, index) => (
+              <div className={`landing-signal-card signal-${index + 1}`} key={signal.label}>
+                <signal.icon size={18} />
+                <span>{signal.label}</span>
+                <strong>{signal.value}</strong>
+              </div>
+            ))}
+            <div className="landing-command-top">
+              <span>Live workspace</span>
+              <strong>MetroBeez Mobility</strong>
+            </div>
+            <div className="landing-command-screen">
+              <div className="landing-command-map">
+                <span className="command-road road-a" />
+                <span className="command-road road-b" />
+                <span className="command-road road-c" />
+                <span className="command-vehicle vehicle-a"><Car size={15} /></span>
+                <span className="command-vehicle vehicle-b"><RouteIcon size={15} /></span>
+              </div>
+              <div className="landing-command-dock">
+                <span><LayoutDashboard size={15} /> Dashboard</span>
+                <span><Car size={15} /> Vehicles</span>
+                <span><CalendarDays size={15} /> Bookings</span>
+                <span><Wrench size={15} /> PMS</span>
+              </div>
+              <div className="landing-command-panel">
+                <div className="landing-panel-header">
+                  <span>BF</span>
+                  <strong>Fleet Pulse</strong>
+                </div>
+                <div className="landing-stat-grid">
+                  {commandStats.map(([value, label]) => (
+                    <div key={label}>
+                      <strong>{value}</strong>
+                      <small>{label}</small>
+                    </div>
+                  ))}
+                </div>
+                <div className="landing-demand-meter">
+                  <span>Top inquiry demand</span>
+                  <strong>NAY 5618</strong>
+                  <i />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="landing-scroll-hint">Built for growing transport businesses in the Philippines</div>
       </section>
 
       <section className="landing-band landing-proof">
-        <div className="landing-proof-item"><strong>One workspace</strong><span>from vehicle setup to renter inquiry</span></div>
-        <div className="landing-proof-item"><strong>Public-ready</strong><span>showcase vehicles with galleries and pricing</span></div>
-        <div className="landing-proof-item"><strong>Ops-first</strong><span>bookings, PMS, trips, documents, and reports</span></div>
+        <div className="landing-proof-item"><strong>One command center</strong><span>from vehicle setup to renter inquiry</span></div>
+        <div className="landing-proof-item"><strong>Customer-ready showcase</strong><span>vehicle galleries, prices, and inquiry forms</span></div>
+        <div className="landing-proof-item"><strong>Owner-level visibility</strong><span>bookings, PMS, trips, documents, and reports</span></div>
+      </section>
+
+      <div className="landing-motion-ribbon" aria-hidden="true">
+        <div>
+          <span>Vehicle records</span>
+          <span>Public booking inquiries</span>
+          <span>PMS reminders</span>
+          <span>Driver and renter profiles</span>
+          <span>Revenue insights</span>
+          <span>Gallery publishing</span>
+          <span>Vehicle records</span>
+          <span>Public booking inquiries</span>
+          <span>PMS reminders</span>
+          <span>Driver and renter profiles</span>
+          <span>Revenue insights</span>
+          <span>Gallery publishing</span>
+        </div>
+      </div>
+
+      <section className="landing-section landing-cinema-panel">
+        <div className="landing-cinema-copy">
+          <span>Designed for daily decisions</span>
+          <h2>Every vehicle becomes a living operational asset.</h2>
+          <p>See what is bookable, what needs maintenance, what is published, and what is producing demand without digging through folders or asking the team for updates.</p>
+        </div>
+        <div className="landing-cinema-visual" aria-hidden="true">
+          {showcase.map(({ title, text, Icon }) => (
+            <article key={title}>
+              <Icon size={22} />
+              <strong>{title}</strong>
+              <span>{text}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section landing-intelligence">
+        <div className="landing-intelligence-copy">
+          <span>Operator intelligence</span>
+          <h2>The back office starts answering business questions.</h2>
+          <p>Instead of only storing records, BeezFleet turns vehicle photos, published listings, bookings, expenses, PMS, and inquiries into signals owners can act on.</p>
+        </div>
+        <div className="landing-insight-board">
+          {insightCards.map((card) => (
+            <article key={card.label}>
+              <card.icon size={20} />
+              <span>{card.label}</span>
+              <strong>{card.value}</strong>
+              <small>{card.detail}</small>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="landing-section landing-benefits" id="benefits">
         <div className="landing-section-heading">
-          <span>Why owners use it</span>
-          <h2>Less admin drag. More fleet control.</h2>
-          <p>BeezFleet helps small and growing operators replace scattered files, chat threads, and manual trackers with a focused operating system for their rental business.</p>
+          <span>What changes</span>
+          <h2>Less admin drag. More operational momentum.</h2>
+          <p>BeezFleet helps growing rental businesses replace scattered files, chat threads, and manual trackers with a focused system that feels built for motion.</p>
         </div>
         <div className="landing-benefit-grid">
           {benefits.map((benefit) => (
@@ -3702,11 +3839,11 @@ function LandingTestPage() {
         </div>
       </section>
 
-      <section className="landing-section landing-product" id="preview">
+      <section className="landing-section landing-product">
         <div className="landing-product-copy">
           <span>Platform preview</span>
-          <h2>A polished back office with a customer-facing edge.</h2>
-          <p>Run the private tenant portal for your team while publishing only the vehicles, details, and photos that customers should see.</p>
+          <h2>Back office discipline. Public-page polish.</h2>
+          <p>Run a private tenant portal for the team while publishing only the vehicles, photos, prices, and customer-facing details that should be seen outside the business.</p>
           <div className="landing-feature-list">
             <span><ShieldCheck size={18} /> Tenant workspaces</span>
             <span><Images size={18} /> Vehicle galleries</span>
@@ -3722,7 +3859,7 @@ function LandingTestPage() {
       <section className="landing-section landing-operators" id="operators">
         <div className="landing-section-heading">
           <span>Who it is for</span>
-          <h2>Built for real operators, not generic SaaS demos.</h2>
+          <h2>Made for operators who earn from moving assets.</h2>
         </div>
         <div className="landing-audience-cloud">
           {audiences.map((audience) => <span key={audience}>{audience}</span>)}
@@ -3748,7 +3885,7 @@ function LandingTestPage() {
 
       <section className="landing-section landing-final-cta">
         <span>Ready when you are</span>
-        <h2>Give your rental fleet a cleaner operating rhythm.</h2>
+        <h2>Give your fleet the operating system it deserves.</h2>
         <p>Use this test page to preview the direction. If it feels right, it can become the future public `/index` experience.</p>
         <div className="landing-actions">
           <Link className="landing-primary" to="/register">Create an account <ChevronRight size={18} /></Link>
