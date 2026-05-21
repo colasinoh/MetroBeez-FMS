@@ -4066,16 +4066,23 @@ function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (aut
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState(searchParams.get('email') ?? '')
+  const token = searchParams.get('token') ?? ''
+  const hasVerificationLink = Boolean(token)
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!hasVerificationLink) {
+      showToast({ title: 'Open the email link', detail: 'Use the newest BeezFleet verification email so the secure token stays hidden.' })
+      return
+    }
+
     setSubmitting(true)
     const form = new FormData(event.currentTarget)
     try {
       const auth = await postJson<AuthResponse>('/api/auth/verify-email', {
         email: String(form.get('email')),
-        token: String(form.get('token')),
+        token,
         companyName: String(form.get('companyName')),
       })
       onAuthenticated(auth)
@@ -4105,14 +4112,19 @@ function VerifyEmailPage({ onAuthenticated, showToast }: { onAuthenticated: (aut
     }
   }
 
-  const token = searchParams.get('token') ?? ''
   return (
     <AuthShell title="Verify email" subtitle="BeezFleet">
       <form className="auth-form" onSubmit={submit}>
         <label className="field"><span>Email</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-        <Field label="Verification token" name="token" defaultValue={token} required />
-        <Field label="Company name" name="companyName" required />
-        <button className="primary-button full" type="submit" disabled={submitting}><CheckCircle2 size={18} /> {submitting ? 'Verifying...' : 'Verify email'}</button>
+        {hasVerificationLink ? (
+          <>
+            <p className="muted-line full">Your verification link is ready. Add your company name and BeezFleet will create your tenant workspace.</p>
+            <Field label="Company name" name="companyName" required />
+            <button className="primary-button full" type="submit" disabled={submitting}><CheckCircle2 size={18} /> {submitting ? 'Verifying...' : 'Create workspace'}</button>
+          </>
+        ) : (
+          <p className="muted-line full">Check your inbox and spam folder for the BeezFleet verification email, then open the secure link inside it. The verification token is kept hidden from this screen.</p>
+        )}
         <button className="secondary-button full" type="button" disabled={resending} onClick={resend}><MailCheck size={18} /> {resending ? 'Sending...' : 'Resend verification email'}</button>
       </form>
     </AuthShell>
