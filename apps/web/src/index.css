@@ -633,6 +633,7 @@ tr:last-child td {
 }
 
 .badge-scheduled,
+.badge-finished,
 .badge-inactive,
 .badge-public {
   background: #e9eef6;
@@ -1803,6 +1804,7 @@ tr:last-child td {
 }
 
 .announcement-banner {
+  width: 100%;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -1812,6 +1814,8 @@ tr:last-child td {
   border-radius: var(--radius);
   background: var(--gold-2);
   color: var(--blue);
+  cursor: pointer;
+  text-align: left;
 }
 
 .announcement-banner small,
@@ -1822,6 +1826,40 @@ tr:last-child td {
 .announcement-banner small {
   margin-top: 3px;
   color: #665017;
+}
+
+.announcement-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 8px;
+  text-align: left;
+}
+
+.announcement-list-item:hover,
+.announcement-list-item.is-selected {
+  background: var(--soft);
+}
+
+.announcement-list-item span {
+  min-width: 0;
+}
+
+.announcement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.announcement-actions button {
+  flex: 1;
 }
 
 .legal-shell {

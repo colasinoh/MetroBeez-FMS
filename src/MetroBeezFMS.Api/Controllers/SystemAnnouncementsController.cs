@@ -21,20 +21,23 @@ public sealed class SystemAnnouncementsController : ControllerBase
     [HttpGet("api/announcements/active")]
     public async Task<ActionResult<IReadOnlyList<SystemAnnouncementDto>>> Active(CancellationToken cancellationToken)
     {
+        await NormalizeAnnouncementsAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var announcements = await _centralDbContext.SystemAnnouncements
+        var announcement = await _centralDbContext.SystemAnnouncements
             .AsNoTracking()
             .Where(x => x.IsActive && x.EndsAt >= now)
-            .OrderBy(x => x.StartsAt)
-            .ToListAsync(cancellationToken);
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.StartsAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        return Ok(announcements.Select(ToDto).ToList());
+        return Ok(announcement is null ? Array.Empty<SystemAnnouncementDto>() : new[] { ToDto(announcement) });
     }
 
     [Authorize(Roles = Roles.SuperAdmin)]
     [HttpGet("api/admin/announcements")]
     public async Task<ActionResult<IReadOnlyList<SystemAnnouncementDto>>> List(CancellationToken cancellationToken)
     {
+        await NormalizeAnnouncementsAsync(cancellationToken);
         var announcements = await _centralDbContext.SystemAnnouncements
             .AsNoTracking()
             .OrderByDescending(x => x.StartsAt)
@@ -68,6 +71,11 @@ public sealed class SystemAnnouncementsController : ControllerBase
             CreatedBy = User.Identity?.Name
         };
 
+        if (announcement.IsActive)
+        {
+            await DeactivateOtherAnnouncementsAsync(null, cancellationToken);
+        }
+
         _centralDbContext.SystemAnnouncements.Add(announcement);
         await _centralDbContext.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(announcement));
@@ -100,9 +108,79 @@ public sealed class SystemAnnouncementsController : ControllerBase
         announcement.IsActive = request.IsActive;
         announcement.UpdatedAt = DateTimeOffset.UtcNow;
         announcement.UpdatedBy = User.Identity?.Name;
+        if (announcement.IsActive)
+        {
+            await DeactivateOtherAnnouncementsAsync(announcement.Id, cancellationToken);
+        }
+
         await _centralDbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(ToDto(announcement));
+    }
+
+    [Authorize(Roles = Roles.SuperAdmin)]
+    [HttpPost("api/admin/announcements/{id:guid}/finish")]
+    public async Task<ActionResult<SystemAnnouncementDto>> Finish(Guid id, CancellationToken cancellationToken)
+    {
+        var announcement = await _centralDbContext.SystemAnnouncements.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (announcement is null)
+        {
+            return NotFound();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        announcement.IsActive = false;
+        if (announcement.EndsAt > now)
+        {
+            announcement.EndsAt = now;
+        }
+
+        announcement.UpdatedAt = now;
+        announcement.UpdatedBy = User.Identity?.Name;
+        await _centralDbContext.SaveChangesAsync(cancellationToken);
+        return Ok(ToDto(announcement));
+    }
+
+    private async Task DeactivateOtherAnnouncementsAsync(Guid? keepAnnouncementId, CancellationToken cancellationToken)
+    {
+        var announcements = await _centralDbContext.SystemAnnouncements
+            .Where(x => x.IsActive && (keepAnnouncementId == null || x.Id != keepAnnouncementId.Value))
+            .ToListAsync(cancellationToken);
+
+        foreach (var announcement in announcements)
+        {
+            announcement.IsActive = false;
+            announcement.UpdatedAt = DateTimeOffset.UtcNow;
+            announcement.UpdatedBy = User.Identity?.Name;
+        }
+    }
+
+    private async Task NormalizeAnnouncementsAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var activeAnnouncements = await _centralDbContext.SystemAnnouncements
+            .Where(x => x.IsActive)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.StartsAt)
+            .ToListAsync(cancellationToken);
+        var keep = activeAnnouncements.FirstOrDefault(x => x.EndsAt >= now);
+        var changed = false;
+
+        foreach (var announcement in activeAnnouncements)
+        {
+            if ((keep is null || announcement.Id != keep.Id) || announcement.EndsAt < now)
+            {
+                announcement.IsActive = false;
+                announcement.UpdatedAt = now;
+                announcement.UpdatedBy = "System";
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await _centralDbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static SystemAnnouncementDto ToDto(SystemAnnouncement announcement)

@@ -1373,6 +1373,7 @@ function PlatformTenantDetailsPage({ session, showToast }: { session: AuthSessio
 
 function PlatformAnnouncementsPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<SystemAnnouncement | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -1409,24 +1410,78 @@ function PlatformAnnouncementsPage({ session, showToast }: { session: AuthSessio
     return <Navigate to="/dashboard" replace />
   }
 
-  const createAnnouncement = async (event: FormEvent<HTMLFormElement>) => {
+  const mergeAnnouncement = (saved: SystemAnnouncement) => {
+    setAnnouncements((current) => {
+      const merged = [saved, ...current.filter((item) => item.id !== saved.id)]
+        .map((item) => saved.isActive && item.id !== saved.id ? { ...item, isActive: false } : item)
+      return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    })
+  }
+
+  const saveAnnouncement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitting(true)
     const formElement = event.currentTarget
     const form = new FormData(formElement)
+
     try {
-      const saved = await postJson<SystemAnnouncement>('/api/admin/announcements', {
+      const payload = {
         title: formString(form, 'title').trim(),
         message: formString(form, 'message').trim(),
         startsAt: formDateTimeOffset(form, 'startsAt'),
         endsAt: formDateTimeOffset(form, 'endsAt'),
         isActive: form.get('isActive') === 'on',
-      }, session.token)
-      setAnnouncements((current) => [saved, ...current])
-      formElement.reset()
-      showToast({ title: 'Announcement posted', detail: 'The login page will show it during the scheduled window.' })
+      }
+      const saved = selectedAnnouncement
+        ? await putJson<SystemAnnouncement>(`/api/admin/announcements/${selectedAnnouncement.id}`, payload, session.token)
+        : await postJson<SystemAnnouncement>('/api/admin/announcements', payload, session.token)
+      mergeAnnouncement(saved)
+      setSelectedAnnouncement(saved)
+      if (!selectedAnnouncement) {
+        formElement.reset()
+      }
+      showToast({
+        title: selectedAnnouncement ? 'Announcement updated' : 'Announcement posted',
+        detail: saved.isActive ? 'This is now the only active login announcement.' : 'The announcement was saved inactive.',
+      })
     } catch (error) {
       showToast({ title: 'Announcement not saved', detail: error instanceof Error ? error.message : 'Please review the schedule.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const setSelectedInactive = async () => {
+    if (!selectedAnnouncement) return
+    setSubmitting(true)
+    try {
+      const saved = await putJson<SystemAnnouncement>(`/api/admin/announcements/${selectedAnnouncement.id}`, {
+        title: selectedAnnouncement.title,
+        message: selectedAnnouncement.message,
+        startsAt: selectedAnnouncement.startsAt,
+        endsAt: selectedAnnouncement.endsAt,
+        isActive: false,
+      }, session.token)
+      mergeAnnouncement(saved)
+      setSelectedAnnouncement(saved)
+      showToast({ title: 'Announcement inactive', detail: 'It will no longer display on the login page.' })
+    } catch (error) {
+      showToast({ title: 'Announcement not updated', detail: error instanceof Error ? error.message : 'Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const finishSelected = async () => {
+    if (!selectedAnnouncement) return
+    setSubmitting(true)
+    try {
+      const saved = await postJson<SystemAnnouncement>(`/api/admin/announcements/${selectedAnnouncement.id}/finish`, {}, session.token)
+      mergeAnnouncement(saved)
+      setSelectedAnnouncement(saved)
+      showToast({ title: 'Announcement finished', detail: 'The maintenance notice is closed and hidden from login.' })
+    } catch (error) {
+      showToast({ title: 'Announcement not finished', detail: error instanceof Error ? error.message : 'Please try again.' })
     } finally {
       setSubmitting(false)
     }
@@ -1436,26 +1491,41 @@ function PlatformAnnouncementsPage({ session, showToast }: { session: AuthSessio
     <Page>
       <PageHeader eyebrow="Platform" title="Announcements" />
       <TwoColumn>
-        <Panel title="System maintenance announcement">
-          <form className="modal-form" onSubmit={createAnnouncement}>
-            <Field label="Title" name="title" defaultValue="Scheduled system maintenance" required />
-            <label className="field full"><span>Message</span><textarea name="message" defaultValue="BeezFleet will undergo scheduled maintenance. Some features may be temporarily unavailable during this window." required /></label>
-            <Field label="Start date/time" name="startsAt" type="datetime-local" required />
-            <Field label="End date/time" name="endsAt" type="datetime-local" required />
-            <label className="toggle-row form-toggle"><input name="isActive" type="checkbox" defaultChecked /> Active</label>
-            <button className="primary-button full" type="submit" disabled={submitting}><Megaphone size={18} /> {submitting ? 'Posting...' : 'Post announcement'}</button>
+        <Panel
+          title={selectedAnnouncement ? 'Edit maintenance announcement' : 'System maintenance announcement'}
+          action={selectedAnnouncement ? <button className="secondary-button compact-button" type="button" onClick={() => setSelectedAnnouncement(null)}>New</button> : undefined}
+        >
+          <form className="modal-form" key={selectedAnnouncement?.id ?? 'new-announcement'} onSubmit={saveAnnouncement}>
+            <Field label="Title" name="title" defaultValue={selectedAnnouncement?.title ?? 'Scheduled system maintenance'} required />
+            <label className="field full"><span>Message</span><textarea name="message" defaultValue={selectedAnnouncement?.message ?? 'BeezFleet will undergo scheduled maintenance. Some features may be temporarily unavailable during this window.'} required /></label>
+            <Field label="Start date/time" name="startsAt" type="datetime-local" defaultValue={dateTimeInputValue(selectedAnnouncement?.startsAt)} required />
+            <Field label="End date/time" name="endsAt" type="datetime-local" defaultValue={dateTimeInputValue(selectedAnnouncement?.endsAt)} required />
+            <label className="toggle-row form-toggle"><input name="isActive" type="checkbox" defaultChecked={selectedAnnouncement?.isActive ?? true} /> Active</label>
+            <button className="primary-button full" type="submit" disabled={submitting}><Megaphone size={18} /> {submitting ? 'Saving...' : selectedAnnouncement ? 'Save announcement' : 'Post announcement'}</button>
+            {selectedAnnouncement && (
+              <div className="announcement-actions full">
+                <button className="secondary-button" type="button" disabled={submitting || !selectedAnnouncement.isActive} onClick={setSelectedInactive}>Set inactive</button>
+                <button className="danger-button" type="button" disabled={submitting || announcementStatus(selectedAnnouncement) === 'Finished'} onClick={finishSelected}>Mark finished</button>
+              </div>
+            )}
           </form>
         </Panel>
         <Panel title="Recent announcements">
           <CompactList>
             {announcements.map((announcement) => (
               <li key={announcement.id}>
-                <span>
-                  <strong>{announcement.title}</strong>
-                  <small>{dateTimeText(announcement.startsAt)} - {dateTimeText(announcement.endsAt)}</small>
-                  <small>{announcement.message}</small>
-                </span>
-                <Badge status={announcement.isActive ? 'Active' : 'Inactive'} />
+                <button
+                  className={`announcement-list-item ${selectedAnnouncement?.id === announcement.id ? 'is-selected' : ''}`}
+                  type="button"
+                  onClick={() => setSelectedAnnouncement(announcement)}
+                >
+                  <span>
+                    <strong>{announcement.title}</strong>
+                    <small>{dateTimeText(announcement.startsAt)} - {dateTimeText(announcement.endsAt)}</small>
+                    <small>{announcement.message}</small>
+                  </span>
+                  <Badge status={announcementStatus(announcement)} />
+                </button>
               </li>
             ))}
           </CompactList>
@@ -3652,6 +3722,7 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([])
+  const [announcementDetail, setAnnouncementDetail] = useState<SystemAnnouncement | null>(null)
   useEffect(() => {
     let active = true
     getJson<SystemAnnouncement[]>('/api/announcements/active')
@@ -3701,17 +3772,19 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
       setSubmitting(false)
     }
   }
+  const currentAnnouncement = announcements[0]
+
   return (
     <AuthShell title="Login" subtitle="BeezFleet">
-      {announcements.map((announcement) => (
-        <div className="announcement-banner" key={announcement.id}>
+      {currentAnnouncement && (
+        <button className="announcement-banner" type="button" onClick={() => setAnnouncementDetail(currentAnnouncement)}>
           <Megaphone size={18} />
           <span>
-            <strong>{announcement.title}</strong>
-            <small>{announcement.message} {dateTimeText(announcement.startsAt)} - {dateTimeText(announcement.endsAt)}</small>
+            <strong>{currentAnnouncement.title}</strong>
+            <small>{currentAnnouncement.message} {dateTimeText(currentAnnouncement.startsAt)} - {dateTimeText(currentAnnouncement.endsAt)}</small>
           </span>
-        </div>
-      ))}
+        </button>
+      )}
       <form className="auth-form" onSubmit={submit}>
         <Field label="Email" name="email" type="email" required />
         <Field label="Password" name="password" type="password" required />
@@ -3720,6 +3793,21 @@ function LoginPage({ onAuthenticated, showToast }: { onAuthenticated: (auth: Aut
         <Link to="/register">Create an account</Link>
         <div className="auth-links"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></div>
       </form>
+      <Modal title="System maintenance" open={Boolean(announcementDetail)} onClose={() => setAnnouncementDetail(null)}>
+        {announcementDetail && (
+          <div className="inquiry-details">
+            <DetailGrid
+              items={[
+                ['Title', announcementDetail.title],
+                ['Status', announcementStatus(announcementDetail)],
+                ['Start', dateTimeText(announcementDetail.startsAt)],
+                ['End', dateTimeText(announcementDetail.endsAt)],
+                ['Message', announcementDetail.message],
+              ]}
+            />
+          </div>
+        )}
+      </Modal>
     </AuthShell>
   )
 }
@@ -4720,6 +4808,14 @@ function dateTimeText(value?: string) {
 
 function statusLabel(status: string) {
   return status.replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
+function announcementStatus(announcement: SystemAnnouncement) {
+  if (!announcement.isActive && new Date(announcement.endsAt).getTime() <= Date.now()) return 'Finished'
+  if (!announcement.isActive) return 'Inactive'
+  if (new Date(announcement.endsAt).getTime() <= Date.now()) return 'Finished'
+  if (new Date(announcement.startsAt).getTime() > Date.now()) return 'Scheduled'
+  return 'Active'
 }
 
 function platformVehicleStatusLabel(status: AdminTenantVehicle['status']) {
