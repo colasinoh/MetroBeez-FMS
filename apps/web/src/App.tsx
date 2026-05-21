@@ -883,6 +883,7 @@ function App() {
         <Route path="/reset-password" element={<ResetPasswordPage showToast={showToast} />} />
         <Route path="/register" element={<RegisterPage showToast={showToast} />} />
         <Route path="/verify-email" element={<VerifyEmailPage onAuthenticated={handleAuthenticated} showToast={showToast} />} />
+        <Route path="/landing-test" element={<LandingTestPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
         <Route
@@ -3637,6 +3638,124 @@ function TermsOfServicePage() {
       <p>BeezFleet may update these terms as the service evolves. Continued use after updates means the tenant accepts the current terms.</p>
       <div className="legal-actions"><Link className="secondary-button" to="/privacy">Privacy Policy</Link><Link className="secondary-button" to="/login">Back to login</Link></div>
     </LegalPage>
+  )
+}
+
+function LandingTestPage() {
+  const benefits = [
+    { icon: Car, title: 'Vehicle operations without spreadsheet sprawl', text: 'Track vehicles, documents, photos, status, availability, and public listing details in one clean workspace.' },
+    { icon: CalendarDays, title: 'Bookings that connect to the rest of the business', text: 'Turn inquiries into bookings, trips, renter records, driver assignments, and revenue visibility.' },
+    { icon: Wrench, title: 'PMS and compliance reminders before they become expensive', text: 'Stay ahead of preventive maintenance, expiring documents, and license dates with operational alerts.' },
+    { icon: Globe2, title: 'A renter-facing page ready for customers', text: 'Publish selected vehicles, prices, feature tags, gallery photos, and inquiry forms without building a separate website.' },
+  ]
+  const audiences = ['Car rental owners', 'Transport operators', 'Logistics fleets', 'Corporate shuttle teams', 'Family-owned rental fleets', 'Growing mobility brands']
+  const workflow = [
+    ['01', 'Capture', 'Register vehicles, drivers, renters, documents, and photos.'],
+    ['02', 'Operate', 'Manage bookings, dispatch trips, monitor PMS, and track expenses.'],
+    ['03', 'Grow', 'Publish vehicles publicly and understand which units bring demand.'],
+  ]
+
+  return (
+    <main className="landing-page">
+      <section className="landing-hero">
+        <nav className="landing-nav" aria-label="Landing page navigation">
+          <Link className="landing-brand" to="/landing-test"><span>BF</span><strong>BeezFleet</strong></Link>
+          <div>
+            <a href="#benefits">Benefits</a>
+            <a href="#operators">Operators</a>
+            <a href="#preview">Preview</a>
+            <Link to="/login">Login</Link>
+          </div>
+        </nav>
+        <div className="landing-hero-content">
+          <span className="landing-kicker">Fleet command center for rental operators</span>
+          <h1>BeezFleet</h1>
+          <p>Modern fleet and car rental management for owners who need bookings, vehicles, drivers, renters, PMS, documents, and public inquiries to move together.</p>
+          <div className="landing-actions">
+            <Link className="landing-primary" to="/register">Start free <ChevronRight size={18} /></Link>
+            <a className="landing-secondary" href="#preview">See the platform</a>
+          </div>
+        </div>
+        <div className="landing-scroll-hint">Built for growing transport businesses in the Philippines</div>
+      </section>
+
+      <section className="landing-band landing-proof">
+        <div className="landing-proof-item"><strong>One workspace</strong><span>from vehicle setup to renter inquiry</span></div>
+        <div className="landing-proof-item"><strong>Public-ready</strong><span>showcase vehicles with galleries and pricing</span></div>
+        <div className="landing-proof-item"><strong>Ops-first</strong><span>bookings, PMS, trips, documents, and reports</span></div>
+      </section>
+
+      <section className="landing-section landing-benefits" id="benefits">
+        <div className="landing-section-heading">
+          <span>Why owners use it</span>
+          <h2>Less admin drag. More fleet control.</h2>
+          <p>BeezFleet helps small and growing operators replace scattered files, chat threads, and manual trackers with a focused operating system for their rental business.</p>
+        </div>
+        <div className="landing-benefit-grid">
+          {benefits.map((benefit) => (
+            <article className="landing-benefit-card" key={benefit.title}>
+              <span><benefit.icon size={22} /></span>
+              <h3>{benefit.title}</h3>
+              <p>{benefit.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section landing-product" id="preview">
+        <div className="landing-product-copy">
+          <span>Platform preview</span>
+          <h2>A polished back office with a customer-facing edge.</h2>
+          <p>Run the private tenant portal for your team while publishing only the vehicles, details, and photos that customers should see.</p>
+          <div className="landing-feature-list">
+            <span><ShieldCheck size={18} /> Tenant workspaces</span>
+            <span><Images size={18} /> Vehicle galleries</span>
+            <span><Bell size={18} /> Smart reminders</span>
+            <span><BarChart3 size={18} /> Owner insights</span>
+          </div>
+        </div>
+        <div className="landing-product-visual">
+          <img src="/social-preview.png" alt="BeezFleet platform preview" />
+        </div>
+      </section>
+
+      <section className="landing-section landing-operators" id="operators">
+        <div className="landing-section-heading">
+          <span>Who it is for</span>
+          <h2>Built for real operators, not generic SaaS demos.</h2>
+        </div>
+        <div className="landing-audience-cloud">
+          {audiences.map((audience) => <span key={audience}>{audience}</span>)}
+        </div>
+      </section>
+
+      <section className="landing-section landing-workflow">
+        <div className="landing-workflow-copy">
+          <span>Workflow</span>
+          <h2>From record keeping to revenue insight.</h2>
+          <p>The value is not one feature. It is the way every record stays connected as your fleet grows.</p>
+        </div>
+        <div className="landing-workflow-steps">
+          {workflow.map(([number, title, text]) => (
+            <article key={number}>
+              <strong>{number}</strong>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section landing-final-cta">
+        <span>Ready when you are</span>
+        <h2>Give your rental fleet a cleaner operating rhythm.</h2>
+        <p>Use this test page to preview the direction. If it feels right, it can become the future public `/index` experience.</p>
+        <div className="landing-actions">
+          <Link className="landing-primary" to="/register">Create an account <ChevronRight size={18} /></Link>
+          <Link className="landing-secondary" to="/login">Go to login</Link>
+        </div>
+      </section>
+    </main>
   )
 }
 
