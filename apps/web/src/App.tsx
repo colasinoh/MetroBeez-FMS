@@ -1049,6 +1049,8 @@ function Shell({
 }
 
 function DashboardPage({ data }: { data: AppData }) {
+  return <DashboardCommandPage data={data} />
+
   const activeTrips = data.trips.filter((trip) => trip.status === 'Active').length
   const monthlyTrips = data.trips.filter((trip) => trip.startDateTime.startsWith('2026-05'))
   const gross = sum(monthlyTrips.map((trip) => trip.grossRevenue))
@@ -1147,6 +1149,377 @@ function DashboardPage({ data }: { data: AppData }) {
         </Panel>
       </section>
     </Page>
+  )
+}
+
+function DashboardCommandPage({ data }: { data: AppData }) {
+  const anchorDate = dashboardAnchorDate(data)
+  const dashboardMonth = monthKey(anchorDate)
+  const activeTrips = data.trips.filter((trip) => trip.status === 'Active').length
+  const monthlyTrips = data.trips.filter((trip) => monthKey(dateFromValue(trip.startDateTime)) === dashboardMonth)
+  const gross = sum(monthlyTrips.map((trip) => trip.grossRevenue))
+  const net = sum(monthlyTrips.map((trip) => netProfit(trip)))
+  const fuelToll = sum(monthlyTrips.map((trip) => trip.fuelExpense + trip.tollExpense))
+  const inquiryCounts = inquiryCountsByVehicle(data)
+  const maxInquiryCount = Math.max(...inquiryCounts.map((item) => item.count), 1)
+  const availableVehicles = countVehicles(data.vehicles, 'Available')
+  const bookedVehicles = countVehicles(data.vehicles, 'Booked')
+  const maintenanceVehicles = countVehicles(data.vehicles, 'Under Maintenance')
+  const engagedVehicleIds = new Set([
+    ...data.vehicles.filter((vehicle) => vehicle.status === 'Booked' || vehicle.status === 'Under Maintenance').map((vehicle) => vehicle.id),
+    ...data.trips.filter((trip) => trip.status === 'Active' || trip.status === 'Scheduled').map((trip) => trip.vehicleId),
+  ])
+  const utilization = data.vehicles.length ? Math.min(100, Math.round((engagedVehicleIds.size / data.vehicles.length) * 100)) : 0
+  const monthlyExpenses = sum(monthlyTrips.map((trip) => totalExpenses(trip)))
+  const totalKm = sum(monthlyTrips.map(kilometers))
+  const openBookings = data.bookings.filter((booking) => ['Pending', 'Confirmed', 'Active'].includes(booking.bookingStatus)).length
+  const publicInquiries = data.publicInquiries.length
+  const nextPms = nextMaintenanceLabel(data.maintenance, anchorDate)
+  const todayBookings = bookingsOnDay(data.bookings, anchorDate)
+  const financialSeries = financialSeriesForTrips(data.trips, anchorDate, 14)
+  const statusSegments = vehicleStatusSegments(data.vehicles)
+  const bookingPipeline = bookingStatusSegments(data.bookings)
+  const vehiclePerformance = vehiclePerformanceRows(data, inquiryCounts)
+  const expenseMix = expenseMixSegments(monthlyTrips)
+  const topInquiry = inquiryCounts[0]
+  const dashboardPeriod = anchorDate.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
+  const openPmsCount = data.maintenance.filter((item) => item.status !== 'Completed').length
+
+  return (
+    <Page>
+      <PageHeader eyebrow="Operations" title="Dashboard" />
+      <section className="dashboard-command-center">
+        <div className="dashboard-motion-field" aria-hidden="true">
+          <span className="dashboard-route route-a" />
+          <span className="dashboard-route route-b" />
+          <span className="dashboard-route route-c" />
+          <span className="dashboard-trail trail-a" />
+          <span className="dashboard-trail trail-b" />
+          <span className="dashboard-map-pulse pulse-a" />
+          <span className="dashboard-map-pulse pulse-b" />
+        </div>
+        <div className="dashboard-command-copy">
+          <span className="dashboard-kicker">Live fleet pulse</span>
+          <h2>Know what is earning, moving, due, and in demand.</h2>
+          <p>Every card and chart below is calculated from your vehicles, bookings, trips, PMS schedules, documents, notifications, and public inquiries.</p>
+          <div className="dashboard-command-actions">
+            <Link className="primary-button" to="/bookings"><CalendarDays size={17} /> Review bookings</Link>
+            <Link className="secondary-button command-secondary" to="/public-page"><Globe2 size={17} /> Public listings</Link>
+          </div>
+        </div>
+        <div className="dashboard-live-stage" aria-label="Live fleet dashboard preview">
+          <div className="dashboard-floating-card inquiry">
+            <MessageSquare size={18} />
+            <span>Public inquiries</span>
+            <strong>{publicInquiries}</strong>
+          </div>
+          <div className="dashboard-floating-card pms">
+            <Wrench size={18} />
+            <span>Next PMS</span>
+            <strong>{nextPms}</strong>
+          </div>
+          <div className="dashboard-floating-card booked">
+            <CalendarDays size={18} />
+            <span>Booked today</span>
+            <strong>{todayBookings}</strong>
+          </div>
+          <div className="dashboard-live-top">
+            <span>Fleet Pulse</span>
+            <strong>{dashboardPeriod}</strong>
+          </div>
+          <div className="dashboard-live-screen">
+            <div className="dashboard-live-dock">
+              <span><LayoutDashboard size={15} /> Dashboard</span>
+              <span><Car size={15} /> Fleet</span>
+              <span><BarChart3 size={15} /> Insights</span>
+            </div>
+            <div className="dashboard-pulse-panel">
+              <div className="dashboard-panel-title">
+                <span>BF</span>
+                <strong>Command snapshot</strong>
+              </div>
+              <div className="dashboard-panel-stats">
+                <div><strong>{data.vehicles.length}</strong><small>vehicles</small></div>
+                <div><strong>{openBookings}</strong><small>open bookings</small></div>
+                <div><strong>{activeTrips}</strong><small>active trips</small></div>
+                <div><strong>{openPmsCount}</strong><small>PMS queue</small></div>
+              </div>
+              <div className="dashboard-demand-meter">
+                <span>Top inquiry demand</span>
+                <strong>{topInquiry?.label || 'No inquiries yet'}</strong>
+                <i style={{ width: `${topInquiry ? Math.max(14, (topInquiry.count / maxInquiryCount) * 100) : 8}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-kpi-grid">
+        <DashboardKpiCard icon={Car} label="Total vehicles" value={data.vehicles.length.toString()} detail={`${availableVehicles} available`} tone="blue" />
+        <DashboardKpiCard icon={CalendarDays} label="Open bookings" value={openBookings.toString()} detail={`${bookedVehicles} vehicles booked`} tone="gold" />
+        <DashboardKpiCard icon={RouteIcon} label="Active trips" value={activeTrips.toString()} detail={`${totalKm.toLocaleString()} km this month`} tone="blue" />
+        <DashboardKpiCard icon={MailCheck} label="Public inquiries" value={publicInquiries.toString()} detail={topInquiry ? `${topInquiry.label} leads` : 'No demand data yet'} tone="gold" />
+        <DashboardKpiCard icon={CircleDollarSign} label="Monthly gross" value={money.format(gross)} detail={`${dashboardPeriod} revenue`} tone="green" />
+        <DashboardKpiCard icon={WalletCards} label="Monthly net" value={money.format(net)} detail={`${money.format(monthlyExpenses)} expenses`} tone="blue" />
+        <DashboardKpiCard icon={Fuel} label="Fuel + toll" value={money.format(fuelToll)} detail="Trip operating spend" tone="red" />
+        <DashboardKpiCard icon={Wrench} label="PMS queue" value={openPmsCount.toString()} detail={`${maintenanceVehicles} vehicles in maintenance`} tone="gold" />
+      </section>
+
+      <section className="dashboard-visual-grid">
+        <Panel title="Revenue pulse" action={<span className="panel-note">{dashboardPeriod}</span>}>
+          <FinancialTrendChart series={financialSeries} gross={gross} net={net} />
+        </Panel>
+        <Panel title="Fleet status" action={<span className="panel-note">{utilization}% engaged</span>}>
+          <FleetStatusChart segments={statusSegments} utilization={utilization} />
+        </Panel>
+        <Panel title="Booking pipeline" action={<Link to="/bookings">Open</Link>}>
+          <BookingPipelineChart segments={bookingPipeline} />
+        </Panel>
+        <Panel title="Expense mix" action={<span className="panel-note">{money.format(monthlyExpenses)}</span>}>
+          <ExpenseMixChart segments={expenseMix} />
+        </Panel>
+        <Panel title="Inquiry demand" action={<Link to="/reports">Insights</Link>}>
+          <InquiryDemandChart items={inquiryCounts.slice(0, 6)} max={maxInquiryCount} />
+        </Panel>
+        <Panel title="Vehicle performance" action={<Link to="/vehicles">Fleet</Link>}>
+          <VehiclePerformanceChart rows={vehiclePerformance.slice(0, 5)} />
+        </Panel>
+      </section>
+
+      <section className="dashboard-grid dashboard-operations-grid">
+        <Panel title="Recent bookings" action={<Link to="/bookings">View all</Link>}>
+          <CompactList>
+            {data.bookings.slice(0, 4).map((booking) => (
+              <li key={booking.id}>
+                <span>
+                  <strong>{booking.referenceNumber}</strong>
+                  <small>{renterName(data, booking.renterId)} - {vehicleLabel(data, booking.vehicleId)}</small>
+                </span>
+                <Badge status={booking.bookingStatus} />
+              </li>
+            ))}
+          </CompactList>
+          {data.bookings.length === 0 && <EmptyState title="No bookings yet" detail="Bookings will appear as soon as you create or receive them." />}
+        </Panel>
+        <Panel title="Recent trips" action={<Link to="/trips">View all</Link>}>
+          <CompactList>
+            {data.trips.slice(0, 4).map((trip) => (
+              <li key={trip.id}>
+                <span>
+                  <strong>{trip.tripNumber}</strong>
+                  <small>{driverName(data, trip.driverId)} - {money.format(netProfit(trip))} net</small>
+                </span>
+                <Badge status={trip.status} />
+              </li>
+            ))}
+          </CompactList>
+          {data.trips.length === 0 && <EmptyState title="No trips yet" detail="Trip activity will appear once bookings are dispatched." />}
+        </Panel>
+        <Panel title="Expiring documents" action={<Link to="/documents">Review</Link>}>
+          <CompactList>
+            {data.documents
+              .filter((doc) => doc.expirationDate)
+              .map((doc) => (
+                <li key={doc.id}>
+                  <span>
+                    <strong>{doc.documentType}</strong>
+                    <small>{doc.entityType} - {dateText(doc.expirationDate)}</small>
+                  </span>
+                  <Badge status={daysUntil(doc.expirationDate) <= 7 ? 'Overdue' : 'Due Soon'} />
+                </li>
+              ))}
+          </CompactList>
+          {data.documents.filter((doc) => doc.expirationDate).length === 0 && <EmptyState title="No expiring documents" detail="Documents with expiration dates will surface here." />}
+        </Panel>
+        <Panel title="Alerts & inquiries" action={<Link to="/notifications">Open</Link>}>
+          <CompactList>
+            {data.notifications.slice(0, 5).map((item) => (
+              <li key={item.id}>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.message}</small>
+                </span>
+                {!item.isRead && <span className="unread-pill">New</span>}
+              </li>
+            ))}
+          </CompactList>
+          {data.notifications.length === 0 && <EmptyState title="No alerts" detail="Operational alerts and booking inquiries will appear here." />}
+        </Panel>
+      </section>
+    </Page>
+  )
+}
+
+function DashboardKpiCard({ icon: Icon, label, value, detail, tone }: { icon: typeof Car; label: string; value: string; detail: string; tone: string }) {
+  return (
+    <article className={`dashboard-kpi-card tone-${tone}`}>
+      <span><Icon size={20} /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <em>{detail}</em>
+      </div>
+    </article>
+  )
+}
+
+function FinancialTrendChart({
+  series,
+  gross,
+  net,
+}: {
+  series: Array<{ key: string; label: string; gross: number; net: number; expenses: number }>
+  gross: number
+  net: number
+}) {
+  const width = 640
+  const height = 230
+  const pad = 26
+  const maxValue = Math.max(...series.flatMap((point) => [point.gross, point.net, point.expenses]), 1)
+  const xFor = (index: number) => pad + (index * (width - pad * 2)) / Math.max(1, series.length - 1)
+  const yFor = (value: number) => height - pad - (value / maxValue) * (height - pad * 2)
+  const grossPath = linePath(series.map((point, index) => [xFor(index), yFor(point.gross)]))
+  const netPath = linePath(series.map((point, index) => [xFor(index), yFor(point.net)]))
+
+  return (
+    <div className="financial-chart">
+      <div className="chart-summary">
+        <span><strong>{money.format(gross)}</strong><small>gross</small></span>
+        <span><strong>{money.format(net)}</strong><small>net</small></span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Gross and net revenue trend">
+        <g className="chart-grid-lines">
+          {[0, 1, 2, 3].map((line) => <line key={line} x1={pad} x2={width - pad} y1={pad + line * 52} y2={pad + line * 52} />)}
+        </g>
+        {series.map((point, index) => {
+          const barHeight = (point.expenses / maxValue) * (height - pad * 2)
+          return (
+            <rect
+              className="chart-expense-bar"
+              key={point.key}
+              x={xFor(index) - 7}
+              y={height - pad - barHeight}
+              width="14"
+              height={barHeight}
+              rx="4"
+              style={{ animationDelay: `${index * 70}ms` }}
+            />
+          )
+        })}
+        <path className="chart-line gross" d={grossPath} />
+        <path className="chart-line net" d={netPath} />
+        {series.map((point, index) => (
+          <circle className="chart-dot" key={`${point.key}-dot`} cx={xFor(index)} cy={yFor(point.gross)} r="4" />
+        ))}
+      </svg>
+      <div className="chart-axis">
+        {series.filter((_, index) => index % 3 === 0 || index === series.length - 1).map((point) => <span key={point.key}>{point.label}</span>)}
+      </div>
+    </div>
+  )
+}
+
+function FleetStatusChart({ segments, utilization }: { segments: Array<{ label: string; value: number; color: string }>; utilization: number }) {
+  const total = sum(segments.map((segment) => segment.value))
+
+  return (
+    <div className="fleet-status-chart">
+      <div className="fleet-donut" style={{ background: conicGradientForSegments(segments) }}>
+        <span><strong>{utilization}%</strong><small>engaged</small></span>
+      </div>
+      <div className="dashboard-legend">
+        {segments.map((segment) => (
+          <span key={segment.label}>
+            <i style={{ background: segment.color }} />
+            {segment.label}
+            <strong>{segment.value}</strong>
+          </span>
+        ))}
+      </div>
+      {total === 0 && <EmptyState title="No vehicles yet" detail="Register vehicles to populate fleet status." />}
+    </div>
+  )
+}
+
+function BookingPipelineChart({ segments }: { segments: Array<{ label: string; value: number; color: string }> }) {
+  const maxValue = Math.max(...segments.map((segment) => segment.value), 1)
+
+  return (
+    <div className="dashboard-meter-list">
+      {segments.map((segment, index) => (
+        <div className="dashboard-meter-row" key={segment.label}>
+          <span>{segment.label}</span>
+          <div><i style={{ width: `${(segment.value / maxValue) * 100}%`, background: segment.color, animationDelay: `${index * 90}ms` }} /></div>
+          <strong>{segment.value}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ExpenseMixChart({ segments }: { segments: Array<{ label: string; value: number; color: string }> }) {
+  const total = sum(segments.map((segment) => segment.value))
+  const maxValue = Math.max(...segments.map((segment) => segment.value), 1)
+
+  if (total === 0) {
+    return <EmptyState title="No trip expenses yet" detail="Fuel, toll, parking, driver proceeds, and other expenses will chart here." />
+  }
+
+  return (
+    <div className="expense-mix-chart">
+      {segments.map((segment, index) => (
+        <div key={segment.label}>
+          <span>{segment.label}</span>
+          <strong>{money.format(segment.value)}</strong>
+          <i><b style={{ width: `${(segment.value / maxValue) * 100}%`, background: segment.color, animationDelay: `${index * 90}ms` }} /></i>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function InquiryDemandChart({ items, max }: { items: Array<{ key: string; label: string; count: number }>; max: number }) {
+  if (items.length === 0) {
+    return <EmptyState title="No inquiries yet" detail="Public booking inquiries will appear here." />
+  }
+
+  return (
+    <div className="dashboard-demand-list">
+      {items.map((item, index) => (
+        <div className="dashboard-demand-row" key={item.key}>
+          <span>{item.label}</span>
+          <div><i style={{ width: `${(item.count / max) * 100}%`, animationDelay: `${index * 90}ms` }} /></div>
+          <strong>{item.count}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function VehiclePerformanceChart({
+  rows,
+}: {
+  rows: Array<{ id: string; label: string; revenue: number; net: number; inquiries: number; kilometers: number }>
+}) {
+  const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1)
+
+  if (rows.length === 0) {
+    return <EmptyState title="No vehicle performance yet" detail="Revenue, net, distance, and inquiry data will appear once records exist." />
+  }
+
+  return (
+    <div className="vehicle-performance-list">
+      {rows.map((row, index) => (
+        <article key={row.id}>
+          <div>
+            <strong>{row.label}</strong>
+            <small>{money.format(row.net)} net - {row.inquiries} inquiries - {row.kilometers.toLocaleString()} km</small>
+          </div>
+          <span>{money.format(row.revenue)}</span>
+          <i><b style={{ width: `${(row.revenue / maxRevenue) * 100}%`, animationDelay: `${index * 90}ms` }} /></i>
+        </article>
+      ))}
+    </div>
   )
 }
 
@@ -5139,6 +5512,161 @@ function Expense({ label, value }: { label: string; value: number }) {
 
 function ToastMessage({ toast }: { toast: Toast }) {
   return <div className="toast"><CheckCircle2 size={20} /><span><strong>{toast.title}</strong><small>{toast.detail}</small></span></div>
+}
+
+function optionalDate(value?: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function dateFromValue(value?: string | null) {
+  return optionalDate(value) ?? new Date()
+}
+
+function dateKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function monthKey(date: Date) {
+  return dateKey(date).slice(0, 7)
+}
+
+function dashboardAnchorDate(data: AppData) {
+  const dates = [
+    ...data.trips.map((trip) => trip.startDateTime),
+    ...data.bookings.map((booking) => booking.startDateTime),
+    ...data.publicInquiries.map((inquiry) => inquiry.createdAt),
+    ...data.notifications.map((notification) => notification.createdAt),
+  ]
+    .map(optionalDate)
+    .filter((date): date is Date => Boolean(date))
+
+  return dates.length > 0
+    ? dates.reduce((latest, date) => (date.getTime() > latest.getTime() ? date : latest), dates[0])
+    : new Date()
+}
+
+function bookingsOnDay(bookings: Booking[], anchorDate: Date) {
+  const anchorKey = dateKey(anchorDate)
+  return bookings.filter((booking) => dateKey(dateFromValue(booking.startDateTime)) === anchorKey).length
+}
+
+function nextMaintenanceLabel(maintenance: MaintenanceSchedule[], anchorDate: Date) {
+  const upcoming = maintenance
+    .filter((schedule) => schedule.status !== 'Completed')
+    .map((schedule) => ({ schedule, due: optionalDate(schedule.dueDate) }))
+    .filter((item): item is { schedule: MaintenanceSchedule; due: Date } => Boolean(item.due))
+    .sort((a, b) => a.due.getTime() - b.due.getTime())
+
+  if (upcoming.length === 0) return 'Clear'
+
+  const anchor = new Date(anchorDate)
+  anchor.setHours(0, 0, 0, 0)
+  const due = new Date(upcoming[0].due)
+  due.setHours(0, 0, 0, 0)
+  const days = Math.ceil((due.getTime() - anchor.getTime()) / 86_400_000)
+  if (days < 0) return 'Overdue'
+  if (days === 0) return 'Today'
+  if (days === 1) return '1 day'
+  return `${days} days`
+}
+
+function financialSeriesForTrips(trips: Trip[], anchorDate: Date, days: number) {
+  const end = new Date(anchorDate)
+  end.setHours(0, 0, 0, 0)
+  const start = new Date(end)
+  start.setDate(start.getDate() - days + 1)
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + index)
+    const key = dateKey(date)
+    const dayTrips = trips.filter((trip) => dateKey(dateFromValue(trip.startDateTime)) === key)
+    return {
+      key,
+      label: date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+      gross: sum(dayTrips.map((trip) => trip.grossRevenue)),
+      net: sum(dayTrips.map((trip) => netProfit(trip))),
+      expenses: sum(dayTrips.map((trip) => totalExpenses(trip))),
+    }
+  })
+}
+
+function vehicleStatusSegments(vehicles: Vehicle[]) {
+  return [
+    { label: 'Available', value: countVehicles(vehicles, 'Available'), color: '#2fb36d' },
+    { label: 'Booked', value: countVehicles(vehicles, 'Booked'), color: '#f5b400' },
+    { label: 'Maintenance', value: countVehicles(vehicles, 'Under Maintenance'), color: '#ef6b64' },
+    { label: 'Inactive', value: countVehicles(vehicles, 'Inactive'), color: '#94a3b8' },
+  ]
+}
+
+function bookingStatusSegments(bookings: Booking[]) {
+  const statuses: BookingStatus[] = ['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled']
+  const colors = ['#f5b400', '#3b82f6', '#2fb36d', '#64748b', '#ef6b64']
+  return statuses.map((status, index) => ({
+    label: status,
+    value: bookings.filter((booking) => booking.bookingStatus === status).length,
+    color: colors[index],
+  }))
+}
+
+function expenseMixSegments(trips: Trip[]) {
+  return [
+    { label: 'Fuel', value: sum(trips.map((trip) => trip.fuelExpense)), color: '#ef6b64' },
+    { label: 'Toll', value: sum(trips.map((trip) => trip.tollExpense)), color: '#f5b400' },
+    { label: 'Parking', value: sum(trips.map((trip) => trip.parkingExpense)), color: '#3b82f6' },
+    { label: 'Driver proceeds', value: sum(trips.map((trip) => trip.driverProceedCommission)), color: '#2fb36d' },
+    { label: 'Other', value: sum(trips.map((trip) => trip.otherExpenses)), color: '#8b5cf6' },
+  ]
+}
+
+function vehiclePerformanceRows(data: AppData, inquiryCounts: Array<{ key: string; label: string; count: number }>) {
+  const inquiryLookup = new Map(inquiryCounts.map((item) => [item.key, item.count]))
+  const labelLookup = new Map(inquiryCounts.map((item) => [item.label, item.count]))
+
+  return data.vehicles
+    .map((vehicle) => {
+      const trips = data.trips.filter((trip) => trip.vehicleId === vehicle.id)
+      const label = vehicleLabel(data, vehicle.id)
+      const inquiries = inquiryLookup.get(vehicle.id)
+        ?? labelLookup.get(label)
+        ?? data.publicInquiries.filter((inquiry) => inquiry.vehicleId === vehicle.id || inquiry.vehicleLabel === label).length
+
+      return {
+        id: vehicle.id,
+        label,
+        revenue: sum(trips.map((trip) => trip.grossRevenue)),
+        net: sum(trips.map((trip) => netProfit(trip))),
+        inquiries,
+        kilometers: sum(trips.map(kilometers)),
+      }
+    })
+    .sort((a, b) => b.revenue - a.revenue || b.inquiries - a.inquiries || a.label.localeCompare(b.label))
+}
+
+function linePath(points: number[][]) {
+  return points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
+}
+
+function conicGradientForSegments(segments: Array<{ value: number; color: string }>) {
+  const total = sum(segments.map((segment) => segment.value))
+  if (total <= 0) return '#e7edf5'
+
+  let cursor = 0
+  const parts = segments
+    .filter((segment) => segment.value > 0)
+    .map((segment) => {
+      const start = cursor
+      const end = cursor + (segment.value / total) * 360
+      cursor = end
+      return `${segment.color} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`
+    })
+
+  return `conic-gradient(${parts.join(', ')})`
 }
 
 function countVehicles(vehicles: Vehicle[], status: VehicleStatus) {
