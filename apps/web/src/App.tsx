@@ -886,6 +886,8 @@ function App() {
         <Route path="/" element={<LandingTestPage />} />
         <Route path="/index" element={<LandingTestPage />} />
         <Route path="/landing-test" element={<LandingTestPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
         <Route
@@ -4015,6 +4017,7 @@ function LandingTestPage() {
             <a href="#benefits">Benefits</a>
             <a href="#operators">Operators</a>
             <a href="#preview">Preview</a>
+            <Link to="/pricing">Pricing</Link>
             <Link className="landing-login-cta" to="/login">Login</Link>
           </div>
         </nav>
@@ -4210,6 +4213,259 @@ function LandingTestPage() {
         <div className="landing-actions">
           <Link className="landing-primary" to="/register">Create an account <ChevronRight size={18} /></Link>
           <Link className="landing-secondary" to="/login">Go to login</Link>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+type PricingFeature = {
+  icon: typeof Car
+  text: string
+}
+
+type PricingPlan = {
+  name: string
+  label: string
+  price: string
+  priceSuffix: string
+  subtitle: string
+  cta: string
+  to: string
+  featured?: boolean
+  features: PricingFeature[]
+}
+
+const pricingPlans: PricingPlan[] = [
+  {
+    name: 'Starter',
+    label: 'Free',
+    price: '0',
+    priceSuffix: '/month',
+    subtitle: 'Best for solo operators testing the platform.',
+    cta: 'Start for Free',
+    to: '/register',
+    features: [
+      { icon: Car, text: 'Up to 2 vehicles' },
+      { icon: UserRound, text: 'Up to 2 drivers' },
+      { icon: RouteIcon, text: '20 trips per month' },
+      { icon: CalendarDays, text: 'Basic booking management' },
+      { icon: Wrench, text: 'Basic maintenance reminders' },
+      { icon: Globe2, text: 'Public booking page' },
+      { icon: Upload, text: 'Limited document uploads' },
+      { icon: ShieldCheck, text: 'BeezFleet branding visible' },
+    ],
+  },
+  {
+    name: 'Pro',
+    label: 'Most Popular',
+    price: '799',
+    priceSuffix: '/month',
+    subtitle: 'Best for small rental businesses.',
+    cta: 'Choose Pro',
+    to: '/register?plan=pro',
+    featured: true,
+    features: [
+      { icon: Car, text: 'Up to 10 vehicles' },
+      { icon: Users, text: 'Unlimited drivers' },
+      { icon: RouteIcon, text: 'Unlimited trips' },
+      { icon: Fuel, text: 'Expense & fuel tracking' },
+      { icon: Wrench, text: 'PMS scheduling' },
+      { icon: FileText, text: 'Document storage' },
+      { icon: MailCheck, text: 'Email reminders' },
+      { icon: CalendarDays, text: 'Booking calendar' },
+      { icon: UserRound, text: 'Customer/renter records' },
+      { icon: BarChart3, text: 'Profit analytics dashboard' },
+      { icon: ShieldCheck, text: 'Remove BeezFleet branding' },
+      { icon: CheckCircle2, text: 'Priority email support' },
+    ],
+  },
+  {
+    name: 'Business',
+    label: 'Scale',
+    price: '1,999',
+    priceSuffix: '/month',
+    subtitle: 'Best for growing fleets.',
+    cta: 'Choose Business',
+    to: '/register?plan=business',
+    features: [
+      { icon: Car, text: 'Up to 50 vehicles' },
+      { icon: Users, text: 'Team & staff accounts' },
+      { icon: ShieldCheck, text: 'Role-based permissions' },
+      { icon: BarChart3, text: 'Advanced reports & analytics' },
+      { icon: Upload, text: 'Downloadable reports' },
+      { icon: FileText, text: 'OR/CR expiry tracking' },
+      { icon: AlertTriangle, text: 'Violation & incident tracking' },
+      { icon: MessageSquare, text: 'SMS integration ready' },
+      { icon: SettingsIcon, text: 'Future API integrations' },
+      { icon: Upload, text: 'Higher S3 cloud storage allocation' },
+      { icon: MailCheck, text: 'Higher email sending limits' },
+      { icon: CheckCircle2, text: 'Priority support' },
+    ],
+  },
+  {
+    name: 'Enterprise',
+    label: 'Custom',
+    price: 'Custom',
+    priceSuffix: 'Pricing',
+    subtitle: 'For large operators, cooperatives, transport groups, and enterprise fleets.',
+    cta: 'Contact Sales',
+    to: '/contact',
+    features: [
+      { icon: Building2, text: 'Unlimited vehicles' },
+      { icon: Globe2, text: 'Custom domain' },
+      { icon: ShieldCheck, text: 'White-label option' },
+      { icon: Users, text: 'Dedicated support' },
+      { icon: SettingsIcon, text: 'Custom modules' },
+      { icon: Building2, text: 'Multi-branch support' },
+      { icon: WalletCards, text: 'Accounting integration' },
+      { icon: FileText, text: 'LTFRB/LTO compliance workflows' },
+      { icon: KeyRound, text: 'Dedicated infrastructure' },
+    ],
+  },
+]
+
+const pricingFaqs = [
+  {
+    question: 'Can I start for free?',
+    answer: 'Yes. The Starter plan lets you manage up to 2 vehicles and test the core features of BeezFleet.',
+  },
+  {
+    question: 'Is BeezFleet only for car rental businesses?',
+    answer: 'No. BeezFleet is also designed for transport, logistics, shuttle, delivery, and enterprise fleet operations.',
+  },
+  {
+    question: 'Can I upgrade later?',
+    answer: 'Yes. You can start free and upgrade as your fleet grows.',
+  },
+  {
+    question: 'Do you support document storage?',
+    answer: 'Yes. BeezFleet supports storage for vehicle documents, renter documents, contracts, receipts, and compliance files.',
+  },
+  {
+    question: 'Is Enterprise pricing available?',
+    answer: 'Yes. Enterprise pricing is available for larger operators that need custom workflows, dedicated support, white-labeling, or dedicated infrastructure.',
+  },
+]
+
+function PublicMarketingNav() {
+  return (
+    <nav className="pricing-nav" aria-label="BeezFleet public navigation">
+      <Link className="pricing-brand" to="/"><span>BF</span><strong>BeezFleet</strong></Link>
+      <div>
+        <Link to="/">Home</Link>
+        <Link to="/pricing">Pricing</Link>
+        <Link to="/contact">Contact</Link>
+        <Link className="pricing-login-link" to="/login">Login</Link>
+      </div>
+    </nav>
+  )
+}
+
+function PricingCard({ plan }: { plan: PricingPlan }) {
+  return (
+    <article className={`pricing-card${plan.featured ? ' pricing-card-featured' : ''}`}>
+      <div className="pricing-card-glow" aria-hidden="true" />
+      <div className="pricing-card-head">
+        <span className={`pricing-plan-label${plan.featured ? ' pricing-plan-label-popular' : ''}`}>{plan.label}</span>
+        <h2>{plan.name}</h2>
+        <p>{plan.subtitle}</p>
+      </div>
+      <div className="pricing-price">
+        {plan.price === 'Custom' ? (
+          <>
+            <strong>{plan.price}</strong>
+            <span>{plan.priceSuffix}</span>
+          </>
+        ) : (
+          <>
+            <strong><span>&#8369;</span>{plan.price}</strong>
+            <span>{plan.priceSuffix}</span>
+          </>
+        )}
+      </div>
+      <Link className={`pricing-card-cta${plan.featured ? ' pricing-card-cta-primary' : ''}`} to={plan.to}>
+        {plan.cta}
+        <ChevronRight size={18} />
+      </Link>
+      <ul className="pricing-feature-list">
+        {plan.features.map((feature) => {
+          const FeatureIcon = feature.icon
+          return (
+            <li key={feature.text}>
+              <FeatureIcon size={17} />
+              <span>{feature.text}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </article>
+  )
+}
+
+function PricingPage() {
+  return (
+    <main className="pricing-page">
+      <PublicMarketingNav />
+      <section className="pricing-hero">
+        <span className="pricing-eyebrow">BeezFleet pricing</span>
+        <h1>Simple pricing for modern fleet operators</h1>
+        <p>Start free, then upgrade as your fleet grows. Built for car rentals, transport businesses, logistics teams, and enterprise fleets.</p>
+        <div className="pricing-trust">No setup fees &bull; Cancel anytime &bull; Built for Philippine fleet operators</div>
+        <div className="pricing-billing-toggle" aria-label="Billing frequency">
+          <button type="button" className="active">Monthly</button>
+          <button type="button">Annual <span>Coming soon</span></button>
+        </div>
+      </section>
+      <section className="pricing-grid" aria-label="BeezFleet plans">
+        {pricingPlans.map((plan) => <PricingCard key={plan.name} plan={plan} />)}
+      </section>
+      <section className="pricing-faq-section">
+        <div className="pricing-section-heading">
+          <span>Questions</span>
+          <h2>Plan details, without the fine-print fog.</h2>
+        </div>
+        <div className="pricing-faq-grid">
+          {pricingFaqs.map((faq) => (
+            <article className="pricing-faq-card" key={faq.question}>
+              <h3>{faq.question}</h3>
+              <p>{faq.answer}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function ContactPage() {
+  return (
+    <main className="pricing-page contact-page">
+      <PublicMarketingNav />
+      <section className="contact-sales-panel">
+        <span className="pricing-eyebrow">Enterprise sales</span>
+        <h1>Let us shape BeezFleet around your operation.</h1>
+        <p>For cooperatives, transport groups, multi-branch rental businesses, and enterprise fleets that need custom workflows, white-labeling, compliance support, or dedicated infrastructure.</p>
+        <div className="contact-sales-grid">
+          <article>
+            <Building2 size={22} />
+            <strong>Tell us about your fleet</strong>
+            <span>Vehicles, branches, user roles, compliance needs, and rollout timeline.</span>
+          </article>
+          <article>
+            <ShieldCheck size={22} />
+            <strong>We map the right setup</strong>
+            <span>Plan limits, integrations, storage, support, and infrastructure options.</span>
+          </article>
+          <article>
+            <MailCheck size={22} />
+            <strong>Get a guided response</strong>
+            <span>A BeezFleet admin can follow up with next steps and pricing details.</span>
+          </article>
+        </div>
+        <div className="contact-sales-actions">
+          <a className="landing-primary" href="mailto:support@beezfleet.ph?subject=BeezFleet%20Enterprise%20Inquiry">Email sales <MailCheck size={18} /></a>
+          <Link className="pricing-card-cta" to="/register?plan=enterprise">Create account <ChevronRight size={18} /></Link>
         </div>
       </section>
     </main>
