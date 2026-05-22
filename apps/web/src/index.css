@@ -764,6 +764,43 @@ tr:last-child td {
   background: var(--gold);
 }
 
+.dashboard-insight-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 251, 0.92)),
+    var(--white);
+  box-shadow: 0 18px 54px rgba(6, 43, 92, 0.07);
+}
+
+.dashboard-insight-header div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-insight-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dashboard-insight-header h2 {
+  color: var(--blue);
+  font-size: 22px;
+}
+
+.dashboard-insight-header p {
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .dashboard-command-center {
   position: relative;
   overflow: hidden;
@@ -862,16 +899,16 @@ tr:last-child td {
   animation-delay: -3.1s;
 }
 
-.dashboard-map-pulse {
+.dashboard-map-beacon {
   position: absolute;
   width: 18px;
   height: 18px;
   border: 2px solid rgba(255, 255, 255, 0.62);
   border-radius: 50%;
-  animation: dashboardPulse 3.8s ease-in-out infinite;
+  animation: dashboardBeacon 3.8s ease-in-out infinite;
 }
 
-.dashboard-map-pulse::after {
+.dashboard-map-beacon::after {
   content: "";
   position: absolute;
   inset: 4px;
@@ -879,12 +916,12 @@ tr:last-child td {
   background: var(--gold);
 }
 
-.dashboard-map-pulse.pulse-a {
+.dashboard-map-beacon.beacon-a {
   left: 18%;
   bottom: 30%;
 }
 
-.dashboard-map-pulse.pulse-b {
+.dashboard-map-beacon.beacon-b {
   right: 18%;
   top: 26%;
   animation-delay: -1.9s;
@@ -1021,7 +1058,7 @@ tr:last-child td {
   color: #ffe8a0;
 }
 
-.dashboard-pulse-panel {
+.dashboard-command-panel {
   position: absolute;
   right: 20px;
   bottom: 20px;
@@ -1181,7 +1218,7 @@ tr:last-child td {
   inset: auto 0 0;
   height: 3px;
   background: linear-gradient(90deg, var(--gold), transparent);
-  animation: dashboardInsightPulse 3.6s ease-in-out infinite;
+  animation: dashboardInsightGlow 3.6s ease-in-out infinite;
 }
 
 .dashboard-kpi-card > span {
@@ -1520,7 +1557,7 @@ tr:last-child td {
   }
 }
 
-@keyframes dashboardPulse {
+@keyframes dashboardBeacon {
   0%, 100% {
     opacity: 0.42;
     box-shadow: 0 0 0 0 rgba(245, 180, 0, 0);
@@ -1558,7 +1595,7 @@ tr:last-child td {
   }
 }
 
-@keyframes dashboardInsightPulse {
+@keyframes dashboardInsightGlow {
   0%, 100% {
     transform: scaleX(0.24);
     opacity: 0.42;
@@ -3914,7 +3951,7 @@ tr:last-child td {
   height: 3px;
   background: linear-gradient(90deg, var(--gold), rgba(248, 187, 24, 0));
   transform-origin: left;
-  animation: insightPulse 3.4s ease-in-out infinite;
+  animation: insightGlow 3.4s ease-in-out infinite;
 }
 
 .landing-insight-board svg {
@@ -4146,7 +4183,7 @@ tr:last-child td {
   }
 }
 
-@keyframes insightPulse {
+@keyframes insightGlow {
   0%, 100% {
     transform: scaleX(0.24);
     opacity: 0.45;
@@ -4182,7 +4219,7 @@ tr:last-child td {
   .dashboard-command-center::before,
   .dashboard-route,
   .dashboard-trail,
-  .dashboard-map-pulse,
+  .dashboard-map-beacon,
   .dashboard-live-stage,
   .dashboard-live-screen,
   .dashboard-floating-card,
@@ -4470,7 +4507,7 @@ tr:last-child td {
     display: none;
   }
 
-  .dashboard-pulse-panel {
+  .dashboard-command-panel {
     right: 12px;
     bottom: 12px;
     width: calc(100% - 24px);

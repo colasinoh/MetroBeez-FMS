@@ -1174,8 +1174,6 @@ function DashboardCommandPage({ data }: { data: AppData }) {
   const totalKm = sum(monthlyTrips.map(kilometers))
   const openBookings = data.bookings.filter((booking) => ['Pending', 'Confirmed', 'Active'].includes(booking.bookingStatus)).length
   const publicInquiries = data.publicInquiries.length
-  const nextPms = nextMaintenanceLabel(data.maintenance, anchorDate)
-  const todayBookings = bookingsOnDay(data.bookings, anchorDate)
   const financialSeries = financialSeriesForTrips(data.trips, anchorDate, 14)
   const statusSegments = vehicleStatusSegments(data.vehicles)
   const bookingPipeline = bookingStatusSegments(data.bookings)
@@ -1188,69 +1186,15 @@ function DashboardCommandPage({ data }: { data: AppData }) {
   return (
     <Page>
       <PageHeader eyebrow="Operations" title="Dashboard" />
-      <section className="dashboard-command-center">
-        <div className="dashboard-motion-field" aria-hidden="true">
-          <span className="dashboard-route route-a" />
-          <span className="dashboard-route route-b" />
-          <span className="dashboard-route route-c" />
-          <span className="dashboard-trail trail-a" />
-          <span className="dashboard-trail trail-b" />
-          <span className="dashboard-map-pulse pulse-a" />
-          <span className="dashboard-map-pulse pulse-b" />
+      <section className="dashboard-insight-header">
+        <div>
+          <span>Data command center</span>
+          <h2>Fleet insights from your actual operations.</h2>
+          <p>Metrics and charts below are calculated from vehicles, bookings, trips, PMS schedules, documents, notifications, and public inquiries.</p>
         </div>
-        <div className="dashboard-command-copy">
-          <span className="dashboard-kicker">Live fleet pulse</span>
-          <h2>Know what is earning, moving, due, and in demand.</h2>
-          <p>Every card and chart below is calculated from your vehicles, bookings, trips, PMS schedules, documents, notifications, and public inquiries.</p>
-          <div className="dashboard-command-actions">
-            <Link className="primary-button" to="/bookings"><CalendarDays size={17} /> Review bookings</Link>
-            <Link className="secondary-button command-secondary" to="/public-page"><Globe2 size={17} /> Public listings</Link>
-          </div>
-        </div>
-        <div className="dashboard-live-stage" aria-label="Live fleet dashboard preview">
-          <div className="dashboard-floating-card inquiry">
-            <MessageSquare size={18} />
-            <span>Public inquiries</span>
-            <strong>{publicInquiries}</strong>
-          </div>
-          <div className="dashboard-floating-card pms">
-            <Wrench size={18} />
-            <span>Next PMS</span>
-            <strong>{nextPms}</strong>
-          </div>
-          <div className="dashboard-floating-card booked">
-            <CalendarDays size={18} />
-            <span>Booked today</span>
-            <strong>{todayBookings}</strong>
-          </div>
-          <div className="dashboard-live-top">
-            <span>Fleet Pulse</span>
-            <strong>{dashboardPeriod}</strong>
-          </div>
-          <div className="dashboard-live-screen">
-            <div className="dashboard-live-dock">
-              <span><LayoutDashboard size={15} /> Dashboard</span>
-              <span><Car size={15} /> Fleet</span>
-              <span><BarChart3 size={15} /> Insights</span>
-            </div>
-            <div className="dashboard-pulse-panel">
-              <div className="dashboard-panel-title">
-                <span>BF</span>
-                <strong>Command snapshot</strong>
-              </div>
-              <div className="dashboard-panel-stats">
-                <div><strong>{data.vehicles.length}</strong><small>vehicles</small></div>
-                <div><strong>{openBookings}</strong><small>open bookings</small></div>
-                <div><strong>{activeTrips}</strong><small>active trips</small></div>
-                <div><strong>{openPmsCount}</strong><small>PMS queue</small></div>
-              </div>
-              <div className="dashboard-demand-meter">
-                <span>Top inquiry demand</span>
-                <strong>{topInquiry?.label || 'No inquiries yet'}</strong>
-                <i style={{ width: `${topInquiry ? Math.max(14, (topInquiry.count / maxInquiryCount) * 100) : 8}%` }} />
-              </div>
-            </div>
-          </div>
+        <div className="dashboard-command-actions">
+          <Link className="primary-button" to="/bookings"><CalendarDays size={17} /> Review bookings</Link>
+          <Link className="secondary-button" to="/public-page"><Globe2 size={17} /> Public listings</Link>
         </div>
       </section>
 
@@ -1266,7 +1210,7 @@ function DashboardCommandPage({ data }: { data: AppData }) {
       </section>
 
       <section className="dashboard-visual-grid">
-        <Panel title="Revenue pulse" action={<span className="panel-note">{dashboardPeriod}</span>}>
+        <Panel title="Revenue trend" action={<span className="panel-note">{dashboardPeriod}</span>}>
           <FinancialTrendChart series={financialSeries} gross={gross} net={net} />
         </Panel>
         <Panel title="Fleet status" action={<span className="panel-note">{utilization}% engaged</span>}>
@@ -4119,7 +4063,7 @@ function LandingTestPage() {
               <div className="landing-command-panel">
                 <div className="landing-panel-header">
                   <span>BF</span>
-                  <strong>Fleet Pulse</strong>
+                  <strong>Fleet Command</strong>
                 </div>
                 <div className="landing-stat-grid">
                   {commandStats.map(([value, label]) => (
@@ -5547,31 +5491,6 @@ function dashboardAnchorDate(data: AppData) {
   return dates.length > 0
     ? dates.reduce((latest, date) => (date.getTime() > latest.getTime() ? date : latest), dates[0])
     : new Date()
-}
-
-function bookingsOnDay(bookings: Booking[], anchorDate: Date) {
-  const anchorKey = dateKey(anchorDate)
-  return bookings.filter((booking) => dateKey(dateFromValue(booking.startDateTime)) === anchorKey).length
-}
-
-function nextMaintenanceLabel(maintenance: MaintenanceSchedule[], anchorDate: Date) {
-  const upcoming = maintenance
-    .filter((schedule) => schedule.status !== 'Completed')
-    .map((schedule) => ({ schedule, due: optionalDate(schedule.dueDate) }))
-    .filter((item): item is { schedule: MaintenanceSchedule; due: Date } => Boolean(item.due))
-    .sort((a, b) => a.due.getTime() - b.due.getTime())
-
-  if (upcoming.length === 0) return 'Clear'
-
-  const anchor = new Date(anchorDate)
-  anchor.setHours(0, 0, 0, 0)
-  const due = new Date(upcoming[0].due)
-  due.setHours(0, 0, 0, 0)
-  const days = Math.ceil((due.getTime() - anchor.getTime()) / 86_400_000)
-  if (days < 0) return 'Overdue'
-  if (days === 0) return 'Today'
-  if (days === 1) return '1 day'
-  return `${days} days`
 }
 
 function financialSeriesForTrips(trips: Trip[], anchorDate: Date, days: number) {
