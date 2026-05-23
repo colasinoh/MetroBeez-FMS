@@ -83,6 +83,7 @@ import type {
   Trip,
   TripStatus,
   Vehicle,
+  VehicleFeatureDefinition,
   VehicleStatus,
 } from './types'
 import './index.css'
@@ -3182,6 +3183,7 @@ function DocumentsPage({
 function PublicPageManagementPage({ session, showToast }: { session: AuthSession | null; showToast: (toast: Toast) => void }) {
   const [model, setModel] = useState<PublicPageManagement | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
 
   useEffect(() => {
     if (!session?.token) {
@@ -3295,114 +3297,313 @@ function PublicPageManagementPage({ session, showToast }: { session: AuthSession
       .map((feature) => `${feature.icon || '+'} | ${feature.label}`)
       .join('\n')
 
+  const saveListingPatch = async (listing: PublicVehicleListing, isPublished: boolean) => {
+    if (isPublished && listing.publicPhotoCount === 0) {
+      showToast({ title: 'Photo required', detail: 'Choose at least one public photo before publishing this vehicle.' })
+      return
+    }
+
+    const featureDefinitionIds = listing.features
+      .filter((feature) => !feature.isCustom && feature.featureDefinitionId)
+      .map((feature) => String(feature.featureDefinitionId))
+    const customFeatures = listing.features
+      .filter((feature) => feature.isCustom)
+      .map((feature, index) => ({
+        icon: feature.icon || '+',
+        label: feature.label,
+        displayOrder: feature.displayOrder ?? 1000 + index,
+      }))
+
+    try {
+      const updated = await putJson<PublicVehicleListing>(`/api/public-page/vehicles/${listing.vehicleId}`, {
+        isPublished,
+        priceAmount: listing.priceAmount ?? null,
+        priceUnit: listing.priceUnit || 'per day',
+        description: listing.description || null,
+        rentalNotes: listing.rentalNotes || null,
+        showPlateNumber: listing.showPlateNumber,
+        displayOrder: listing.displayOrder,
+        featureDefinitionIds,
+        customFeatures,
+      }, session.token)
+
+      setModel((current) => current ? {
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.vehicleId === updated.vehicleId ? updated : vehicle),
+      } : current)
+      showToast({ title: isPublished ? 'Vehicle published' : 'Vehicle hidden', detail: `${updated.vehicleLabel} was updated.` })
+    } catch (error) {
+      showToast({ title: 'Publish setting not saved', detail: error instanceof Error ? error.message : 'Please try again.' })
+    }
+  }
+
+  const selectedListing = model?.vehicles.find((listing) => listing.vehicleId === selectedVehicleId) ?? model?.vehicles[0] ?? null
+  const publishedCount = model?.vehicles.filter((listing) => listing.isPublished).length ?? 0
+  const readyCount = model?.vehicles.filter((listing) => listing.publicPhotoCount > 0).length ?? 0
+  const publicPhotoCount = model?.vehicles.reduce((total, listing) => total + listing.publicPhotoCount, 0) ?? 0
+  const selectListing = (vehicleId: string) => {
+    setSelectedVehicleId(vehicleId)
+    window.setTimeout(() => document.getElementById('public-listing-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 20)
+  }
+
   return (
     <Page>
       <PageHeader eyebrow="Showcase" title="Public page" />
       {loading && <EmptyState title="Loading public page settings" detail="Fetching tenant showcase options." />}
       {model && (
         <>
-          <form className="form-panel public-settings-panel" onSubmit={updateSettings}>
-            <h2>Tenant public page</h2>
-            <label className="toggle-row">
-              <input name="enabled" type="checkbox" defaultChecked={model.settings.enabled} />
-              <span>Enable public page</span>
-            </label>
-            {model.settings.publicUrl && (
-              <div className="public-page-link-row">
-                <span>Public page</span>
-                {model.settings.slug && <code>/{model.settings.slug}</code>}
-                <a className="secondary-button compact-button" href={model.settings.publicUrl} target="_blank" rel="noreferrer">Open</a>
+          <section className="public-showcase-hero">
+            <div>
+              <span>Public showcase control</span>
+              <h2>Curate the vehicles customers can see.</h2>
+              <p>Publish only ready vehicles, choose customer-facing photos, and tune pricing, feature tags, and rental copy from one polished workspace.</p>
+            </div>
+            <div className="public-showcase-stats" aria-label="Public page publishing summary">
+              <article><strong>{model.vehicles.length}</strong><small>Total vehicles</small></article>
+              <article><strong>{publishedCount}</strong><small>Published</small></article>
+              <article><strong>{readyCount}</strong><small>Photo-ready</small></article>
+              <article><strong>{publicPhotoCount}</strong><small>Public photos</small></article>
+            </div>
+          </section>
+
+          <form className="public-settings-panel" onSubmit={updateSettings}>
+            <div className="public-settings-card public-settings-status">
+              <div>
+                <span className="public-card-eyebrow">Tenant public page</span>
+                <h2>{model.settings.enabled ? 'Showcase is live' : 'Showcase is disabled'}</h2>
+                <p>Control the headline, booking instructions, and public access for your customer-facing page.</p>
               </div>
-            )}
-            <Field label="Headline" name="headline" defaultValue={model.settings.headline || ''} />
-            <label className="field">
-              <span>Description</span>
-              <textarea name="description" defaultValue={model.settings.description || ''} rows={3} />
-            </label>
-            <label className="field">
-              <span>Booking instructions</span>
-              <textarea name="bookingInstructions" defaultValue={model.settings.bookingInstructions || ''} rows={3} />
-            </label>
-            <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save public page</button></div>
+              <label className="public-switch">
+                <input name="enabled" type="checkbox" defaultChecked={model.settings.enabled} />
+                <span />
+                <strong>{model.settings.enabled ? 'Enabled' : 'Disabled'}</strong>
+              </label>
+              {model.settings.publicUrl && (
+                <div className="public-page-link-row">
+                  <span>Public page</span>
+                  {model.settings.slug && <code>/{model.settings.slug}</code>}
+                  <a className="secondary-button compact-button" href={model.settings.publicUrl} target="_blank" rel="noreferrer">Open</a>
+                </div>
+              )}
+            </div>
+            <div className="public-settings-card public-copy-card">
+              <Field label="Headline" name="headline" defaultValue={model.settings.headline || ''} />
+              <label className="field">
+                <span>Description</span>
+                <textarea name="description" defaultValue={model.settings.description || ''} rows={3} />
+              </label>
+              <label className="field">
+                <span>Booking instructions</span>
+                <textarea name="bookingInstructions" defaultValue={model.settings.bookingInstructions || ''} rows={3} />
+              </label>
+              <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save public page</button></div>
+            </div>
           </form>
 
-          <section className="public-manager-grid">
-            {model.vehicles.map((listing) => {
-              const selectedFeatureIds = new Set(listing.features.filter((feature) => !feature.isCustom && feature.featureDefinitionId).map((feature) => feature.featureDefinitionId))
-              return (
-                <form className="public-listing-card" key={listing.vehicleId} onSubmit={(event) => saveListing(listing, event)}>
-                  <header>
-                    <div>
-                      <h2>{listing.vehicleLabel}</h2>
-                      <p>{listing.status} - {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
+          <section className="public-vehicle-board">
+            <header className="public-board-header">
+              <div>
+                <span className="public-card-eyebrow">Vehicle publishing</span>
+                <h2>All vehicles at a glance</h2>
+                <p>Click a vehicle to edit its public listing. Use the publish switch when it is ready for customers.</p>
+              </div>
+            </header>
+            <div className="public-vehicle-board-grid">
+              {model.vehicles.map((listing) => {
+                const coverPhoto = listing.photos.find((photo) => photo.isPublic) ?? listing.photos[0]
+                const selected = selectedListing?.vehicleId === listing.vehicleId
+                return (
+                  <article className={`public-vehicle-tile${selected ? ' is-selected' : ''}${listing.isPublished ? ' is-published' : ''}`} key={listing.vehicleId}>
+                    <button className="public-vehicle-tile-main" type="button" onClick={() => selectListing(listing.vehicleId)}>
+                      <span className="public-vehicle-cover">
+                        {coverPhoto
+                          ? <SafeImage src={coverPhoto.displayUrl} alt={coverPhoto.caption || listing.vehicleLabel} fallback={<Camera size={18} />} />
+                          : <span className="public-empty-cover"><Camera size={20} /> No photos</span>}
+                      </span>
+                      <span className="public-vehicle-tile-body">
+                        <span className="public-tile-status-row">
+                          <span className={`public-status-pill ${listing.isPublished ? 'is-live' : 'is-draft'}`}>{listing.isPublished ? 'Public' : 'Private'}</span>
+                          <span>{listing.publicPhotoCount}/{listing.photoCount} photos</span>
+                        </span>
+                        <strong>{listing.vehicleLabel}</strong>
+                        <small>{listing.status} {listing.priceAmount ? `- ${money.format(listing.priceAmount)} ${listing.priceUnit || 'per day'}` : '- No price set'}</small>
+                      </span>
+                    </button>
+                    <div className="public-tile-actions">
+                      <label className="public-mini-check" title={listing.publicPhotoCount === 0 ? 'Choose at least one public photo first' : 'Toggle public listing'}>
+                        <input type="checkbox" checked={listing.isPublished} disabled={listing.publicPhotoCount === 0} onChange={(event) => saveListingPatch(listing, event.target.checked)} />
+                        <span />
+                        <strong>Make public</strong>
+                      </label>
+                      <button type="button" onClick={() => selectListing(listing.vehicleId)}><Edit3 size={15} /> Edit details</button>
                     </div>
-                    <label className="toggle-row publish-toggle">
-                      <input name="isPublished" type="checkbox" defaultChecked={listing.isPublished} disabled={listing.publicPhotoCount === 0} />
-                      <span>Published</span>
-                    </label>
-                  </header>
-
-                  {listing.photoCount === 0 && <p className="warning-line">Add at least one vehicle photo before this can be published.</p>}
-                  {listing.photoCount > 0 && listing.publicPhotoCount === 0 && <p className="warning-line">Tick at least one photo below before publishing.</p>}
-
-                  <div className="public-photo-strip">
-                    {listing.photos.map((photo) => {
-                      return (
-                        <label className="public-photo-choice" key={photo.id}>
-                          <span>
-                            <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={18} />} />
-                          </span>
-                          <input type="checkbox" checked={photo.isPublic} onChange={(event) => updatePhotoVisibility(listing, photo, event.target.checked)} />
-                        </label>
-                      )
-                    })}
-                  </div>
-
-                  <div className="form-grid">
-                    <Field label="Price" name="priceAmount" type="number" defaultValue={listing.priceAmount?.toString() || ''} />
-                    <Field label="Price unit" name="priceUnit" defaultValue={listing.priceUnit || 'per day'} />
-                    <Field label="Display order" name="displayOrder" type="number" defaultValue={String(listing.displayOrder)} />
-                    <label className="toggle-row form-toggle">
-                      <input name="showPlateNumber" type="checkbox" defaultChecked={listing.showPlateNumber} />
-                      <span>Show plate number</span>
-                    </label>
-                  </div>
-
-                  <label className="field">
-                    <span>Short renter-facing description</span>
-                    <textarea name="description" rows={3} defaultValue={listing.description || ''} />
-                  </label>
-                  <label className="field">
-                    <span>Rental notes</span>
-                    <textarea name="rentalNotes" rows={3} defaultValue={listing.rentalNotes || ''} />
-                  </label>
-
-                  <fieldset className="feature-fieldset">
-                    <legend>Predefined features</legend>
-                    <div className="feature-check-grid">
-                      {model.featureDefinitions.map((feature) => (
-                        <label key={feature.id}>
-                          <input name="featureDefinitionIds" type="checkbox" value={feature.id} defaultChecked={selectedFeatureIds.has(feature.id)} />
-                          <span>{feature.icon} {feature.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-
-                  <label className="field">
-                    <span>Custom features</span>
-                    <textarea name="customFeatures" rows={3} defaultValue={customFeatureText(listing)} placeholder="+ | Child seat available" />
-                  </label>
-
-                  <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save listing</button></div>
-                </form>
-              )
-            })}
+                  </article>
+                )
+              })}
+            </div>
+            {model.vehicles.length === 0 && <EmptyState title="No vehicles yet" detail="Add vehicles first, then return here to publish your customer-facing fleet." />}
           </section>
+
+          {selectedListing && (
+            <PublicListingEditor
+              listing={selectedListing}
+              featureDefinitions={model.featureDefinitions}
+              customFeatureText={customFeatureText}
+              onPhotoVisibilityChange={updatePhotoVisibility}
+              onSubmit={saveListing}
+            />
+          )}
         </>
       )}
     </Page>
   )
+}
+
+function PublicListingEditor({
+  listing,
+  featureDefinitions,
+  customFeatureText,
+  onPhotoVisibilityChange,
+  onSubmit,
+}: {
+  listing: PublicVehicleListing
+  featureDefinitions: VehicleFeatureDefinition[]
+  customFeatureText: (listing: PublicVehicleListing) => string
+  onPhotoVisibilityChange: (listing: PublicVehicleListing, photo: PhotoItem, isPublic: boolean) => void
+  onSubmit: (listing: PublicVehicleListing, event: FormEvent<HTMLFormElement>) => void
+}) {
+  const selectedFeatureIds = new Set(listing.features.filter((feature) => !feature.isCustom && feature.featureDefinitionId).map((feature) => feature.featureDefinitionId))
+
+  return (
+    <form id="public-listing-editor" className="public-listing-card public-listing-editor" key={listing.vehicleId} onSubmit={(event) => onSubmit(listing, event)}>
+      <header className="public-editor-header">
+        <div>
+          <span className="public-card-eyebrow">Listing editor</span>
+          <h2>{listing.vehicleLabel}</h2>
+          <p>{listing.status} - {listing.publicPhotoCount}/{listing.photoCount} public photos</p>
+        </div>
+        <label className="public-switch publish-toggle">
+          <input name="isPublished" type="checkbox" defaultChecked={listing.isPublished} disabled={listing.publicPhotoCount === 0} />
+          <span />
+          <strong>Published</strong>
+        </label>
+      </header>
+
+      {listing.photoCount === 0 && <p className="warning-line">Add at least one vehicle photo before this can be published.</p>}
+      {listing.photoCount > 0 && listing.publicPhotoCount === 0 && <p className="warning-line">Tick at least one photo below before publishing.</p>}
+
+      <section className="public-editor-section">
+        <div className="public-editor-section-title">
+          <Images size={18} />
+          <div>
+            <h3>Customer gallery</h3>
+            <p>Pick the photos that should appear on the public page.</p>
+          </div>
+        </div>
+        <div className="public-photo-strip">
+          {listing.photos.map((photo) => (
+            <label className={`public-photo-choice${photo.isPublic ? ' is-public' : ''}`} key={photo.id}>
+              <span>
+                <SafeImage src={photo.displayUrl} alt={photo.caption || photo.originalFileName} fallback={<Camera size={18} />} />
+                {photo.isPublic && <em>Public</em>}
+              </span>
+              <input type="checkbox" checked={photo.isPublic} onChange={(event) => onPhotoVisibilityChange(listing, photo, event.target.checked)} />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="public-editor-section">
+        <div className="public-editor-section-title">
+          <CircleDollarSign size={18} />
+          <div>
+            <h3>Pricing and visibility</h3>
+            <p>Set sorting, customer-facing price, and which identifiers are exposed.</p>
+          </div>
+        </div>
+        <div className="form-grid">
+          <Field label="Price" name="priceAmount" type="number" defaultValue={listing.priceAmount?.toString() || ''} />
+          <Field label="Price unit" name="priceUnit" defaultValue={listing.priceUnit || 'per day'} />
+          <Field label="Display order" name="displayOrder" type="number" defaultValue={String(listing.displayOrder)} />
+          <label className="public-premium-check form-toggle">
+            <input name="showPlateNumber" type="checkbox" defaultChecked={listing.showPlateNumber} />
+            <span><ShieldCheck size={16} /></span>
+            <strong>Show plate number</strong>
+          </label>
+        </div>
+      </section>
+
+      <section className="public-editor-section">
+        <div className="public-editor-section-title">
+          <FileText size={18} />
+          <div>
+            <h3>Customer-facing copy</h3>
+            <p>Keep it short, clear, and useful for renters comparing vehicles.</p>
+          </div>
+        </div>
+        <label className="field">
+          <span>Short renter-facing description</span>
+          <textarea name="description" rows={3} defaultValue={listing.description || ''} />
+        </label>
+        <label className="field">
+          <span>Rental notes</span>
+          <textarea name="rentalNotes" rows={3} defaultValue={listing.rentalNotes || ''} />
+        </label>
+      </section>
+
+      <fieldset className="feature-fieldset public-editor-section">
+        <legend className="public-editor-section-title">
+          <CheckCircle2 size={18} />
+          <span>
+            <strong>Predefined features</strong>
+            <small>Premium quick tags make listings easier to scan on the public page.</small>
+          </span>
+        </legend>
+        <div className="feature-check-grid">
+          {featureDefinitions.map((feature) => {
+            const FeatureIcon = publicFeatureIcon(feature)
+            return (
+              <label className="public-feature-token" key={feature.id}>
+                <input name="featureDefinitionIds" type="checkbox" value={feature.id} defaultChecked={selectedFeatureIds.has(feature.id)} />
+                <span className="feature-token-check"><CheckCircle2 size={14} /></span>
+                <span className="feature-token-icon"><FeatureIcon size={17} /></span>
+                <span className="feature-token-copy"><small>{feature.icon}</small><strong>{feature.label}</strong></span>
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+
+      <section className="public-editor-section">
+        <div className="public-editor-section-title">
+          <Plus size={18} />
+          <div>
+            <h3>Custom features</h3>
+            <p>Use one line per feature, formatted like: + | Child seat available.</p>
+          </div>
+        </div>
+        <label className="field">
+          <span>Custom features</span>
+          <textarea name="customFeatures" rows={3} defaultValue={customFeatureText(listing)} placeholder="+ | Child seat available" />
+        </label>
+      </section>
+
+      <div className="form-actions"><button className="primary-button" type="submit"><Save size={18} /> Save listing</button></div>
+    </form>
+  )
+}
+
+function publicFeatureIcon(feature: VehicleFeatureDefinition): typeof Car {
+  const text = `${feature.code} ${feature.icon} ${feature.label}`.toUpperCase()
+  if (text.includes('AC') || text.includes('AIR')) return Sun
+  if (text.includes('BT') || text.includes('BLUETOOTH')) return MessageSquare
+  if (text.includes('DC') || text.includes('DASH')) return Camera
+  if (text.includes('DRIVER')) return UserRound
+  if (text.includes('FUEL')) return Fuel
+  if (text.includes('LUGGAGE')) return WalletCards
+  if (text.includes('DELIVERY') || text.includes('LOGISTICS')) return RouteIcon
+  if (text.includes('TRANSMISSION')) return SettingsIcon
+  return CheckCircle2
 }
 
 function TenantPublicPage({ showToast }: { showToast: (toast: Toast) => void }) {
